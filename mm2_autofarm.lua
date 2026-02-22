@@ -110,8 +110,6 @@ task.spawn(function()
     end
 end)
 
-
-
                                         local rgb = Color3.fromRGB
                                         local function v2(x, y)
                                             return Vector2.new(math.floor(x or 0), math.floor(y or 0))
@@ -744,7 +742,7 @@ end)
                                                     container = create("Square", { Filled = true, Color = self.colors.base, ZIndex = 2000, Visible = false }),
                                                     outline = create("Square", { Filled = false, Color = self.colors.crust, ZIndex = 1999, Visible = false }),
                                                     accent_bar = create("Square", { Filled = true, Color = self.colors.accent, ZIndex = 2001, Visible = false }),
-                                                    label = create("Text", { Text = "mm2yesido | @" .. plr.Name, Color = self.colors.text, Size = 17.5, ZIndex = 2002, Visible = false })
+                                                    label = create("Text", { Text = "naska.ui | @" .. plr.Name, Color = self.colors.text, Size = 17.5, ZIndex = 2002, Visible = false })
                                                 }
 
                                                 self._dcache = {main,main_outline,mantle,text,gradient,gradient_outline,resize_handle}
@@ -820,10 +818,8 @@ end)
 
                                                             if input.UserInputType == Enum.UserInputType.Keyboard then
                                                                 local key = input.KeyCode
-                                                                print("DEBUG: [InputBegan] Key:", key, "GameProcessed:", gameProcessed)
 
                                                                 if key == Enum.KeyCode.Return or key == Enum.KeyCode.KeypadEnter or key == Enum.KeyCode.Escape then
-                                                                    print("DEBUG: Unfocusing via Key")
                                                                     self.focused_textbox.focused = false
                                                                     self.focused_textbox = nil
                                                                     return
@@ -838,7 +834,6 @@ end)
                                                                 end
 
                                                                 local char = uis:GetStringForKeyCode(key)
-                                                                print("DEBUG: GetStringForKeyCode returned:", tostring(char))
                                                                 if key == Enum.KeyCode.Space then char = " " end
 
                                                                 if char and #char > 0 then
@@ -957,7 +952,6 @@ end)
                                                                     end
 
                                                                     textbox.text = textbox.text .. char
-                                                                    print("DEBUG: Polled Input: " .. char)
                                                                     if textbox.callback then textbox.callback(textbox.text) end
                                                                     self._needs_save = true
                                                                 end
@@ -1449,12 +1443,10 @@ end)
                                                                             self.focused_textbox = item
                                                                             item.focused = true
                                                                             self.keys.mouse1.click = false
-                                                                            print("DEBUG: Focused " .. item.name .. " (Manual)")
                                                                         elseif self.keys.mouse1.click and self.focused_textbox == item then
 
                                                                             self.focused_textbox = nil
                                                                             item.focused = false
-                                                                            print("DEBUG: Unfocused by click")
                                                                         end
 
                                                                         itemStartPosition+=(50)
@@ -2574,7 +2566,9 @@ local plr     = Players.LocalPlayer
 local UNDER_OFFSET = 30
 
 local farmEnabled    = false
-local studsPerSecond = 35   -- travel speed in studs/sec (user controlled)
+local studsPerSecond = 35
+local webhookURL     = ""
+local roundCoins     = 0
 
 local function getHRP()
     local char = plr.Character
@@ -2591,6 +2585,40 @@ end
 
 local function isAlive()
     return plr:GetAttribute("Alive") == true
+end
+
+local function sendWebhook(message)
+    if not webhookURL or webhookURL == "" then return end
+    pcall(function()
+        game:GetService("HttpService"):PostAsync(webhookURL,
+            '{"content":"' .. message .. '"}',
+            Enum.HttpContentType.ApplicationJson
+        )
+    end)
+end
+
+local lastCoinLog = 0
+
+local function getCoinCount()
+    local highest = 0
+    for _, v in ipairs(plr.PlayerGui:GetDescendants()) do
+        if v.Name == "Coins" and v.Parent and v.Parent.Name == "Icon"
+            and v.Parent.Parent and v.Parent.Parent.Name == "CurrencyFrame" then
+            local ok, raw = pcall(memory_read, "string", v.Address + 0xe08)
+            local n = ok and tonumber(raw) or 0
+            if n and n > highest then highest = n end
+        end
+    end
+    return highest
+end
+
+local function isBagFull()
+    local count = getCoinCount()
+    local now = os.clock()
+    if now - lastCoinLog >= 5 then
+        lastCoinLog = now
+    end
+    return count >= 40
 end
 
 local function findCoinContainer()
@@ -2616,6 +2644,7 @@ local function startNoclip()
             end
             task.wait()
         end
+
         local char = plr.Character
         if char then
             for _, part in char:GetChildren() do
@@ -2629,28 +2658,28 @@ end
 
 local function tweenHRP(targetPos, speed)
     local hrp = getHRP()
-    if not hrp then warn("[farm] tweenHRP: no HRP found") return end
+    if not hrp then print("[tween] no HRP, skipping") return end
     local sx, sy, sz = hrp.Position.X, hrp.Position.Y, hrp.Position.Z
     local tx, ty, tz = targetPos.X, targetPos.Y, targetPos.Z
     local dist = math.sqrt((tx-sx)^2 + (ty-sy)^2 + (tz-sz)^2)
-    print(string.format("[tween] START from (%.1f, %.1f, %.1f) to (%.1f, %.1f, %.1f) dist=%.1f speed=%d", sx, sy, sz, tx, ty, tz, dist, speed))
     if dist < 0.5 then
         hrp.Position = targetPos
-        print("[tween] SKIP (too close)")
+        hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
         return
     end
     local duration = dist / speed
     local t0 = os.clock()
     while farmEnabled do
         local hrp2 = getHRP()
-        if not hrp2 then warn("[tween] HRP lost mid-tween") return end
+        if not hrp2 then break end
         local elapsed = os.clock() - t0
         if elapsed >= duration then break end
         local alpha = elapsed / duration
+        local t = alpha * alpha * (3 - 2 * alpha)
         hrp2.Position = Vector3.new(
-            sx + (tx - sx) * alpha,
-            sy + (ty - sy) * alpha,
-            sz + (tz - sz) * alpha
+            sx + (tx - sx) * t,
+            sy + (ty - sy) * t,
+            sz + (tz - sz) * t
         )
         hrp2.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
         task.wait()
@@ -2659,7 +2688,6 @@ local function tweenHRP(targetPos, speed)
     if hrp2 then
         hrp2.Position = targetPos
         hrp2.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-        print(string.format("[tween] END pos=(%.1f, %.1f, %.1f)", hrp2.Position.X, hrp2.Position.Y, hrp2.Position.Z))
     end
 end
 
@@ -2670,75 +2698,94 @@ local function runFarm()
     farmThreadActive = true
 
     local firstCoin = true
-    local visited   = {}  
+    local visited   = {}
 
     while farmEnabled do
         if not isAlive() then
+
+            if roundCoins > 0 then
+                sendWebhook("☠️ You died! Collected **" .. roundCoins .. "** coins this round.")
+                roundCoins = 0
+            end
             task.wait(0.5)
             continue
         end
 
+        if isBagFull() then
+            if roundCoins > 0 then
+                sendWebhook("💰 Bag full! Collected **" .. roundCoins .. "/40** coins this round.")
+                roundCoins = 0
+            end
+            task.wait(1)
+            continue
+        end
+
+        local timerPart = workspace:FindFirstChild("RoundTimerPart")
+        if timerPart then
+            local t = timerPart:GetAttribute("Time")
+            if t and t <= 0 then
+                task.wait(1)
+                continue
+            end
+        end
+
         local container = findCoinContainer()
         if not container then
+            if roundCoins > 0 then
+                sendWebhook("🏁 Round ended. Collected **" .. roundCoins .. "** coins.")
+                roundCoins = 0
+            end
             visited   = {}
             firstCoin = true
             task.wait(1)
             continue
         end
 
-        local coin = nil
+        local coin     = nil
+        local bestDist = math.huge
+        local hrpNow   = getHRP()
+        local px, py, pz = 0, 0, 0
+        if hrpNow then px, py, pz = hrpNow.Position.X, hrpNow.Position.Y, hrpNow.Position.Z end
+
         for _, part in container:GetChildren() do
-            if part.Name == "Coin_Server" and part.Parent and not visited[part] then
-                coin = part
-                break
+            local pkey = string.format("%.1f_%.1f_%.1f", part.Position.X, part.Position.Y, part.Position.Z)
+            if part.Name == "Coin_Server" and part.Parent and not visited[pkey] then
+                local cp = part.Position
+                local d  = math.sqrt((cp.X-px)^2 + (cp.Y-py)^2 + (cp.Z-pz)^2)
+                if d < bestDist then
+                    bestDist = d
+                    coin     = part
+                end
             end
         end
 
         if not coin then
-            
+
             visited   = {}
             firstCoin = true
             task.wait(2)
             continue
         end
 
-        
-        visited[coin] = true
+        local coinKey = string.format("%.1f_%.1f_%.1f", coin.Position.X, coin.Position.Y, coin.Position.Z)
+        visited[coinKey] = true
 
         local pos  = coin.Position
         local bpos = Vector3.new(pos.X, math.max(pos.Y - UNDER_OFFSET, 5), pos.Z)
 
-        print(string.format("[farm] coin pos=(%.1f, %.1f, %.1f) below=(%.1f, %.1f, %.1f)", pos.X, pos.Y, pos.Z, bpos.X, bpos.Y, bpos.Z))
-
         if firstCoin then
-            print("[farm] first coin - fast tween below")
             tweenHRP(bpos, 999)
             firstCoin = false
         else
-            print("[farm] tween to next coin below")
             tweenHRP(bpos, studsPerSecond)
         end
 
         if not farmEnabled then break end
 
-        print("[farm] hit 1 UP") setPos(pos)
-        print(string.format("[farm] hrp pos after UP=(%.1f, %.1f, %.1f)", pos.X, pos.Y, pos.Z))
-        task.wait(0.3)
-        print("[farm] hit 1 DOWN") setPos(bpos)
-        print(string.format("[farm] hrp pos after DOWN=(%.1f, %.1f, %.1f)", bpos.X, bpos.Y, bpos.Z))
-        task.wait()
-
-        print("[farm] hit 2 UP") setPos(pos)
-        task.wait(0.3)
-        print("[farm] hit 2 DOWN") setPos(bpos)
-        task.wait()
-
-        print("[farm] hit 3 UP") setPos(pos)
-        task.wait(0.3)
-        print("[farm] hit 3 DOWN") setPos(bpos)
-        task.wait()
-
+        roundCoins = roundCoins + 1
         setPos(pos)
+        task.wait(0.3)
+        setPos(bpos)
         task.wait()
     end
 
@@ -2815,7 +2862,7 @@ local function formatTime(secs)
     return string.format("%d:%02d", math.floor(secs / 60), secs % 60)
 end
 
-local TW, TH = 160, 46  
+local TW, TH = 160, 46
 
 local timerBG = Drawing.new("Square")
 timerBG.Filled       = true
@@ -2862,7 +2909,6 @@ timerLabel.ZIndex       = 2002
 timerLabel.Transparency = 1
 timerLabel.Visible      = false
 
--- Timer position — deferred so ViewportSize is ready
 local timerX, timerY = 10, 400
 
 local function applyTimerPos()
@@ -2876,9 +2922,8 @@ end
 
 applyTimerPos()
 
-
 local mouse       = plr:GetMouse()
-local dragging    = nil   
+local dragging    = nil
 local dragOffX    = 0
 local dragOffY    = 0
 local wasPressed  = false
@@ -2891,12 +2936,11 @@ end
 while lib.running do
     lib:step()
 
-
     local pressed = ismouse1pressed()
     local mx, my  = mouse.X, mouse.Y
 
     if pressed and not wasPressed then
-   
+
         if timerBG.Visible and mouseInBox(timerX, timerY, TW, TH) then
             dragging = "timer"
             dragOffX = mx - timerX
@@ -2923,7 +2967,6 @@ while lib.running do
 
     wasPressed = pressed
 
- 
     local timerPart = workspace:FindFirstChild("RoundTimerPart")
     if timerPart then
         local t = timerPart:GetAttribute("Time")
