@@ -1,6 +1,3 @@
--- ══════════════════════════════════════════════════════════════════════
---  RunService VM
--- ══════════════════════════════════════════════════════════════════════
 local RunService = {}
 local Render_Step_Priority_Bindings = {}
 local Thread_Execution_Active_State = true
@@ -113,9 +110,6 @@ task.spawn(function()
     end
 end)
 
--- ══════════════════════════════════════════════════════════════════════
---  naska UI lib (inlined)
--- ══════════════════════════════════════════════════════════════════════
 
 
                                         local rgb = Color3.fromRGB
@@ -750,7 +744,7 @@ end)
                                                     container = create("Square", { Filled = true, Color = self.colors.base, ZIndex = 2000, Visible = false }),
                                                     outline = create("Square", { Filled = false, Color = self.colors.crust, ZIndex = 1999, Visible = false }),
                                                     accent_bar = create("Square", { Filled = true, Color = self.colors.accent, ZIndex = 2001, Visible = false }),
-                                                    label = create("Text", { Text = "naska.ui | @" .. plr.Name, Color = self.colors.text, Size = 17.5, ZIndex = 2002, Visible = false })
+                                                    label = create("Text", { Text = "mm2yesido | @" .. plr.Name, Color = self.colors.text, Size = 17.5, ZIndex = 2002, Visible = false })
                                                 }
 
                                                 self._dcache = {main,main_outline,mantle,text,gradient,gradient_outline,resize_handle}
@@ -2574,23 +2568,14 @@ end)
                                             end
                                         end
 
--- ══════════════════════════════════════════════════════════════════════
---  Services & references
--- ══════════════════════════════════════════════════════════════════════
 local Players = game:GetService("Players")
 local plr     = Players.LocalPlayer
 
 local UNDER_OFFSET = 30
 
--- ══════════════════════════════════════════════════════════════════════
---  Autofarm state
--- ══════════════════════════════════════════════════════════════════════
 local farmEnabled    = false
 local studsPerSecond = 35   -- travel speed in studs/sec (user controlled)
 
--- ══════════════════════════════════════════════════════════════════════
---  Helpers
--- ══════════════════════════════════════════════════════════════════════
 local function getHRP()
     local char = plr.Character
     if not char then return nil end
@@ -2618,8 +2603,6 @@ local function findCoinContainer()
     return nil
 end
 
--- Noclip loop: runs as its own thread, continuously forces CanCollide off
--- every frame so nothing can ever block the character mid-farm
 local function startNoclip()
     task.spawn(function()
         while farmEnabled do
@@ -2633,7 +2616,6 @@ local function startNoclip()
             end
             task.wait()
         end
-        -- Restore when farm stops
         local char = plr.Character
         if char then
             for _, part in char:GetChildren() do
@@ -2645,8 +2627,6 @@ local function startNoclip()
     end)
 end
 
--- Linear tween: moves HRP smoothly from current pos to target at studs/sec
--- Uses os.clock so task.wait() return value doesn't matter
 local function tweenHRP(targetPos, speed)
     local hrp = getHRP()
     if not hrp then warn("[farm] tweenHRP: no HRP found") return end
@@ -2683,9 +2663,6 @@ local function tweenHRP(targetPos, speed)
     end
 end
 
--- ══════════════════════════════════════════════════════════════════════
---  Farm loop
--- ══════════════════════════════════════════════════════════════════════
 local farmThreadActive = false
 
 local function runFarm()
@@ -2693,7 +2670,7 @@ local function runFarm()
     farmThreadActive = true
 
     local firstCoin = true
-    local visited   = {}  -- track coins we've already attempted this round
+    local visited   = {}  
 
     while farmEnabled do
         if not isAlive() then
@@ -2709,7 +2686,6 @@ local function runFarm()
             continue
         end
 
-        -- Pick the next coin we haven't attempted yet
         local coin = nil
         for _, part in container:GetChildren() do
             if part.Name == "Coin_Server" and part.Parent and not visited[part] then
@@ -2719,14 +2695,14 @@ local function runFarm()
         end
 
         if not coin then
-            -- All coins in this round attempted, wait for next round
+            
             visited   = {}
             firstCoin = true
             task.wait(2)
             continue
         end
 
-        -- Mark immediately so we never re-target this coin
+        
         visited[coin] = true
 
         local pos  = coin.Position
@@ -2834,15 +2810,12 @@ secUI:adddropdown{
     end
 }
 
--- ══════════════════════════════════════════════════════════════════════
---  Round Timer Indicator
--- ══════════════════════════════════════════════════════════════════════
 local function formatTime(secs)
     secs = math.max(0, math.floor(secs))
     return string.format("%d:%02d", math.floor(secs / 60), secs % 60)
 end
 
-local TW, TH = 160, 46  -- timer box size
+local TW, TH = 160, 46  
 
 local timerBG = Drawing.new("Square")
 timerBG.Filled       = true
@@ -2903,11 +2876,9 @@ end
 
 applyTimerPos()
 
--- ══════════════════════════════════════════════════════════════════════
---  Drag logic — polled via ismouse1pressed() each frame
--- ══════════════════════════════════════════════════════════════════════
+
 local mouse       = plr:GetMouse()
-local dragging    = nil   -- nil | "timer" | "watermark"
+local dragging    = nil   
 local dragOffX    = 0
 local dragOffY    = 0
 local wasPressed  = false
@@ -2917,18 +2888,15 @@ local function mouseInBox(bx, by, bw, bh)
     return mx >= bx and mx <= bx + bw and my >= by and my <= by + bh
 end
 
--- ══════════════════════════════════════════════════════════════════════
---  Render loop
--- ══════════════════════════════════════════════════════════════════════
 while lib.running do
     lib:step()
 
-    -- Drag logic via polling
+
     local pressed = ismouse1pressed()
     local mx, my  = mouse.X, mouse.Y
 
     if pressed and not wasPressed then
-        -- Mouse just went down — pick what to drag
+   
         if timerBG.Visible and mouseInBox(timerX, timerY, TW, TH) then
             dragging = "timer"
             dragOffX = mx - timerX
@@ -2955,7 +2923,7 @@ while lib.running do
 
     wasPressed = pressed
 
-    -- Update timer
+ 
     local timerPart = workspace:FindFirstChild("RoundTimerPart")
     if timerPart then
         local t = timerPart:GetAttribute("Time")
