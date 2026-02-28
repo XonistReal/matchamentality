@@ -4,21 +4,23 @@ _naskaSrc = _naskaSrc:gsub("%s*return%s+ui%s*$", "")
 loadstring(_naskaSrc .. "\n_G.__naska_ui = ui")()
 local ui = _G.__naska_ui
 
--- =====================
--- SERVICES
--- =====================
+
 local Players = game:GetService("Players")
 local player  = Players.LocalPlayer
+local mouse   = player:GetMouse()
 
--- =====================
--- STATE
--- =====================
+
 local SPACE = 0x20
 
 local CONFIG = {
     bhop = {
-        enabled = false,
-        key     = nil,
+        enabled      = false,
+        key          = nil,
+        velThreshold = 1,    -- vertical velocity window to trigger jump (studs/s)
+        jumpDelay    = 0.01, -- seconds to hold space before releasing
+        tickRate     = 0.01, -- how often bhop loop ticks (seconds)
+        autoStrafe   = false,
+        strafeSens   = 2,    -- mouse delta X magnitude threshold to trigger A/D
     },
     nextbotEsp = {
         enabled     = false,
@@ -38,9 +40,7 @@ local CONFIG = {
     },
 }
 
--- =====================
--- NEXTBOT ESP
--- =====================
+
 local nextbotDrawings = {}
 
 local function ClearAllNextbotESP()
@@ -64,40 +64,108 @@ local function HideAllESP()
     end
 end
 
+-- Cache player names
+local playerNamesCache = {}
+Players.PlayerAdded:Connect(function(p) playerNamesCache[p.Name] = true end)
+Players.PlayerRemoving:Connect(function(p) playerNamesCache[p.Name] = nil end)
+for _, p in ipairs(Players:GetPlayers()) do playerNamesCache[p.Name] = true end
+
+-- Cache workspace path
+local playersFolder = nil
+
+-- Persistent seen table - reused every frame
+local _seen = {}
+
+
+local cachedChildren      = {}
+local cachedChildCount    = -1
+local screenCX, screenCY  = 960, 540
+
+local function RebuildChildrenCache()
+    if not playersFolder then return end
+    cachedChildren   = playersFolder:GetChildren()
+    cachedChildCount = #cachedChildren
+end
+
+
+-- We track last-written values per drawing and skip writes if unchanged.
+-- For vectors/sizes we store X and Y separately to avoid Vector2 allocation on compare.
+
+local function SetVisible(obj, v)
+    if obj.Visible ~= v then obj.Visible = v end
+end
+
+local function SetText(obj, t)
+    if obj.Text ~= t then obj.Text = t end
+end
+
+local function SetPos2(obj, x, y)
+    -- Only write if changed (avoids allocating Vector2 unnecessarily)
+    local p = obj.Position
+    if p.X ~= x or p.Y ~= y then
+        obj.Position = Vector2.new(x, y)
+    end
+end
+
+local function SetSize2(obj, w, h)
+    local s = obj.Size
+    if s.X ~= w or s.Y ~= h then
+        obj.Size = Vector2.new(w, h)
+    end
+end
+
 local function UpdateNextbotESP()
     local cfg = CONFIG.nextbotEsp
 
-    local playerNames = {}
-    for _, p in ipairs(Players:GetPlayers()) do
-        playerNames[p.Name] = true
+    if not playersFolder then
+        local g = game.Workspace:FindFirstChild("Game")
+        playersFolder = g and g:FindFirstChild("Players") or nil
+        if playersFolder then
+            RebuildChildrenCache()
+        end
     end
-
-    local game_folder   = game.Workspace:FindFirstChild("Game")
-    local playersFolder = game_folder and game_folder:FindFirstChild("Players")
     if not playersFolder then return end
 
-    local myRoot   = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-    local screenCX = camera and camera.ViewportSize.X * 0.5 or 960
-    local screenCY = camera and camera.ViewportSize.Y * 0.5 or 540
+    -- Only rebuild children table when count changes (cheap check, avoids full alloc every tick)
+    local currentCount = #playersFolder:GetChildren()
+    if currentCount ~= cachedChildCount then
+        RebuildChildrenCache()
+    end
 
-    local seen = {}
+    local char   = player.Character
+    local hrp    = char and char:FindFirstChild("HumanoidRootPart")
+    local camPos = hrp and hrp.Position
 
-    for _, model in ipairs(playersFolder:GetChildren()) do
-        if playerNames[model.Name] then continue end
-        if not model:IsA("Model")  then continue end
+    -- clear seen flags
+    for k in pairs(_seen) do _seen[k] = nil end
+
+    for _, model in ipairs(cachedChildren) do
+        if playerNamesCache[model.Name] then continue end
+        if not model:IsA("Model") then continue end
 
         local root = model:FindFirstChild("HumanoidRootPart")
                   or model:FindFirstChild("Hitbox")
         if not root then continue end
 
-        -- Max distance check
-        local dist3D = myRoot and (myRoot.Position - root.Position).Magnitude or 0
-        if dist3D > cfg.maxDist then continue end
+        _seen[model] = true
 
-        seen[model] = true
+        local pos    = root.Position
+        local dist3D = camPos and (camPos - pos).Magnitude or 0
 
-        -- Create drawings on first sight
-        -- NOTE: creation order = draw order in Matcha, so fill is created FIRST (behind box)
+        -- Cull by distance before any drawing work
+        if camPos and dist3D > cfg.maxDist then
+            local entry = nextbotDrawings[model]
+            if entry then
+                SetVisible(entry.box,   false)
+                SetVisible(entry.fill,  false)
+                SetVisible(entry.label, false)
+                SetVisible(entry.dist,  false)
+                SetVisible(entry.line,  false)
+            end
+            continue
+        end
+
+        -- Create drawings lazily
         if not nextbotDrawings[model] then
             local fill        = Drawing.new("Square")
             fill.Filled       = true
@@ -113,6 +181,7 @@ local function UpdateNextbotESP()
             box.Visible       = false
 
             local label       = Drawing.new("Text")
+            label.Text        = model.Name
             label.Outline     = true
             label.Center      = true
             label.Size        = 14
@@ -120,6 +189,7 @@ local function UpdateNextbotESP()
             label.Visible     = false
 
             local dist        = Drawing.new("Text")
+            dist.Text         = ""
             dist.Outline      = true
             dist.Center       = true
             dist.Size         = 12
@@ -131,11 +201,10 @@ local function UpdateNextbotESP()
             line.Color        = cfg.lineColor
             line.Visible      = false
 
-            -- Cache part size — it never changes at runtime
             local partSize = root.Size
-            local isTiny   = partSize and (partSize.X < 0.5 or partSize.Y < 0.5 or partSize.Z < 0.5)
             local extentY  = math.max(1, partSize and partSize.Y * 0.5 or 1)
             local extentX  = math.max(1, partSize and partSize.X * 0.5 or 1)
+            local isTiny   = partSize and (partSize.X < 0.5 or partSize.Y < 0.5 or partSize.Z < 0.5)
 
             nextbotDrawings[model] = {
                 box = box, fill = fill, label = label, dist = dist, line = line,
@@ -144,21 +213,25 @@ local function UpdateNextbotESP()
         end
 
         local entry               = nextbotDrawings[model]
-        local pos                 = root.Position
         local screenPos, onScreen = WorldToScreen(pos)
 
+        -- Traceline (only write From/To if visible)
+        if cfg.showLine then
+            entry.line.From = Vector2.new(screenCX, screenCY)
+            entry.line.To   = screenPos
+            SetVisible(entry.line, true)
+        else
+            SetVisible(entry.line, false)
+        end
+
         if not onScreen then
-            entry.box.Visible   = false
-            entry.fill.Visible  = false
-            entry.label.Visible = false
-            entry.dist.Visible  = false
-            entry.line.Visible  = false
+            SetVisible(entry.box,   false)
+            SetVisible(entry.fill,  false)
+            SetVisible(entry.label, false)
+            SetVisible(entry.dist,  false)
             continue
         end
 
-        -- Only 2 WorldToScreen calls: center (above) + top edge
-        -- Bottom is symmetric: screenPos.Y + (screenPos.Y - topY)
-        -- Width derived from height * (extentX / extentY) aspect ratio
         local topScreen, _ = WorldToScreen(pos + Vector3.new(0, entry.extentY, 0))
         local halfH = math.max(cfg.minBoxSize * 0.5, screenPos.Y - topScreen.Y)
         local halfW = math.max(cfg.minBoxSize * 0.5, halfH * (entry.extentX / entry.extentY))
@@ -172,53 +245,51 @@ local function UpdateNextbotESP()
         local boxY = screenPos.Y - halfH
         local w    = halfW * 2
         local h    = halfH * 2
-        local bpos = Vector2.new(boxX, boxY)
-        local bsiz = Vector2.new(w, h)
 
-        -- Only write position/size every frame (hot path)
-        -- Color/thickness only change when user edits config, handled by callbacks
+        -- Box (skip property writes if values unchanged)
+        SetPos2(entry.box, boxX, boxY)
+        SetSize2(entry.box, w, h)
+        SetVisible(entry.box, cfg.showBox)
 
-        -- Box outline
-        entry.box.Position = bpos
-        entry.box.Size     = bsiz
-        entry.box.Visible  = cfg.showBox
+        -- Fill
+        if cfg.showBox and cfg.fillBox then
+            SetPos2(entry.fill, boxX, boxY)
+            SetSize2(entry.fill, w, h)
+            SetVisible(entry.fill, true)
+        else
+            SetVisible(entry.fill, false)
+        end
 
-        -- Fill (rendered behind via ZIndex)
-        entry.fill.Position = bpos
-        entry.fill.Size     = bsiz
-        entry.fill.Visible  = cfg.showBox and cfg.fillBox
+        -- Label
+        SetPos2(entry.label, screenPos.X, boxY - 16)
+        SetVisible(entry.label, cfg.showName)
 
-        -- Name label
-        entry.label.Position = Vector2.new(screenPos.X, boxY - 16)
-        entry.label.Visible  = cfg.showName
-
-        -- Distance label
-        entry.dist.Position = Vector2.new(screenPos.X, boxY + h + 2)
-        entry.dist.Text     = string.format("%.0f", dist3D) .. " studs"
-        entry.dist.Visible  = cfg.showDist
-
-        -- Traceline from crosshair
-        entry.line.From    = Vector2.new(screenCX, screenCY)
-        entry.line.To      = Vector2.new(screenPos.X, screenPos.Y)
-        entry.line.Visible = cfg.showLine
+        -- Distance text — only rebuild string if integer distance changed
+        if cfg.showDist then
+            local distInt = math.floor(dist3D)
+            local distStr = distInt .. " studs"
+            SetText(entry.dist, distStr)
+            SetPos2(entry.dist, screenPos.X, boxY - 30)
+            SetVisible(entry.dist, true)
+        else
+            SetVisible(entry.dist, false)
+        end
     end
 
-    -- Cleanup despawned
+    -- Cleanup removed models
     for model, entry in pairs(nextbotDrawings) do
-        if not seen[model] then
-            if entry.box   then entry.box:Remove()   end
-            if entry.fill  then entry.fill:Remove()  end
-            if entry.label then entry.label:Remove() end
-            if entry.dist  then entry.dist:Remove()  end
-            if entry.line  then entry.line:Remove()  end
+        if not _seen[model] then
+            entry.box:Remove()
+            entry.fill:Remove()
+            entry.label:Remove()
+            entry.dist:Remove()
+            entry.line:Remove()
             nextbotDrawings[model] = nil
         end
     end
 end
 
--- =====================
--- UI
--- =====================
+
 local lib = ui:create("script", {
     theme = "gamesense",
     size  = Vector2.new(580, 420)
@@ -240,6 +311,47 @@ utilSection:addkeybind{
         CONFIG.bhop.key = (v and v ~= "") and v or nil
     end
 }
+utilSection:addtoggle{
+    Name     = "Auto Strafe",
+    Default  = false,
+    Callback = function(v) CONFIG.bhop.autoStrafe = v end
+}
+utilSection:addslider{
+    Name     = "Strafe Sensitivity",
+    Default  = 2,
+    Minimum  = 1,
+    Max      = 20,
+    Step     = 1,
+    Suffix   = "px",
+    Callback = function(v) CONFIG.bhop.strafeSens = v end
+}
+utilSection:addslider{
+    Name     = "Velocity Threshold",
+    Default  = 1,
+    Minimum  = 1,
+    Max      = 10,
+    Step     = 1,
+    Suffix   = " s/u",
+    Callback = function(v) CONFIG.bhop.velThreshold = v end
+}
+utilSection:addslider{
+    Name     = "Jump Hold Duration",
+    Default  = 10,
+    Minimum  = 1,
+    Max      = 50,
+    Step     = 1,
+    Suffix   = "ms",
+    Callback = function(v) CONFIG.bhop.jumpDelay = v / 1000 end
+}
+utilSection:addslider{
+    Name     = "Tick Rate",
+    Default  = 10,
+    Minimum  = 1,
+    Max      = 50,
+    Step     = 1,
+    Suffix   = "ms",
+    Callback = function(v) CONFIG.bhop.tickRate = v / 1000 end
+}
 
 -- TAB: ESP
 local espTab      = lib:tab("esp")
@@ -247,7 +359,6 @@ local espMain     = espTab:section("nextbot esp", false)
 local espStyle    = espTab:section("style", true)
 local espColors   = espTab:section("colors", false)
 
--- Main toggles
 espMain:addtoggle{
     Name     = "NextBot ESP",
     Default  = false,
@@ -282,7 +393,6 @@ espMain:addtoggle{
     Callback = function(v) CONFIG.nextbotEsp.fillBox = v end
 }
 
--- Style
 espStyle:addslider{
     Name     = "Fill Opacity",
     Default  = 15,
@@ -320,7 +430,6 @@ espStyle:addslider{
     Callback = function(v) CONFIG.nextbotEsp.minBoxSize = v end
 }
 
--- Colors (dropdowns with presets since Naska may not have a color picker)
 local colorPresets = {"Red", "Orange", "Yellow", "Green", "Cyan", "Blue", "Purple", "White", "Pink"}
 local colorValues  = {
     Red    = Color3.fromRGB(255, 60,  60),
@@ -407,48 +516,96 @@ uiSection:addbutton{
     Callback = function() lib.running = false end
 }
 
--- =====================
--- BHOP LOOP
--- =====================
+
+local KEY_W = 0x57
+local KEY_A = 0x41
+local KEY_D = 0x44
+
+local _strafeLeft  = false
+local _strafeRight = false
+local _strafeW     = false
+local _lastMouseX  = 0
+
+local function ReleaseStrafeKeys()
+    if _strafeLeft  then keyrelease(KEY_A) _strafeLeft  = false end
+    if _strafeRight then keyrelease(KEY_D) _strafeRight = false end
+    if _strafeW     then keyrelease(KEY_W) _strafeW     = false end
+end
+
 spawn(function()
     while lib.running do
-        if CONFIG.bhop.enabled and CONFIG.bhop.key then
-            local keyData = lib.keys[CONFIG.bhop.key]
+        local cfg = CONFIG.bhop
+        if cfg.enabled and cfg.key then
+            local keyData = lib.keys[cfg.key]
             if keyData and keyData.hold then
                 local character = player.Character
                 if character then
                     local rootPart = character:FindFirstChild("HumanoidRootPart")
                     if rootPart then
+                        -- Bhop jump
                         local velY = rootPart.Velocity.Y
-                        if velY > -1 and velY < 1 then
+                        local t    = cfg.velThreshold
+                        if velY > -t and velY < t then
                             keypress(SPACE)
-                            wait(0.01)
+                            task.wait(cfg.jumpDelay)
                             keyrelease(SPACE)
+                        end
+
+                        -- Auto strafe
+                        if cfg.autoStrafe then
+                            local currentX = mouse.X
+                            local deltaX   = currentX - _lastMouseX
+                            _lastMouseX    = currentX
+
+                            -- Always hold W
+                            if not _strafeW then
+                                keypress(KEY_W)
+                                _strafeW = true
+                            end
+
+                            -- A/D based on mouse X delta since last tick
+                            if deltaX < -cfg.strafeSens then
+                                -- Moving mouse left → press A, release D
+                                if _strafeRight then keyrelease(KEY_D) _strafeRight = false end
+                                if not _strafeLeft then keypress(KEY_A) _strafeLeft = true end
+                            elseif deltaX > cfg.strafeSens then
+                                -- Moving mouse right → press D, release A
+                                if _strafeLeft then keyrelease(KEY_A) _strafeLeft = false end
+                                if not _strafeRight then keypress(KEY_D) _strafeRight = true end
+                            else
+                                -- Mouse not moving → release A and D
+                                if _strafeLeft  then keyrelease(KEY_A) _strafeLeft  = false end
+                                if _strafeRight then keyrelease(KEY_D) _strafeRight = false end
+                            end
+                        else
+                            ReleaseStrafeKeys()
                         end
                     end
                 end
+            else
+                -- Key not held, release everything
+                ReleaseStrafeKeys()
             end
+        else
+            ReleaseStrafeKeys()
         end
-        task.wait(0.01)
+        task.wait(cfg.tickRate)
     end
+    ReleaseStrafeKeys()
 end)
 
--- =====================
--- ESP LOOP
--- =====================
+
 spawn(function()
     while lib.running do
         if CONFIG.nextbotEsp.enabled then
-            pcall(UpdateNextbotESP)
+            UpdateNextbotESP()
         end
-        task.wait(1/60)
+        task.wait(1/45)
     end
     ClearAllNextbotESP()
 end)
 
--- =====================
--- MAIN LOOP
--- =====================
+
 while lib.running do
     lib:step()
     task.wait()
