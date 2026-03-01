@@ -4,9 +4,7 @@ _naskaSrc = _naskaSrc:gsub("%s*return%s+ui%s*$", "")
 loadstring(_naskaSrc .. "\n_G.__naska_ui = ui")()
 local ui = _G.__naska_ui
 
--- =====================
--- RUNSERVICE VM (inlined directly)
--- =====================
+
 local RunService
 do
     local _RS_table = {}
@@ -163,17 +161,13 @@ do
 end
 
 
--- =====================
--- SERVICES
--- =====================
+
 local Players = game:GetService("Players")
 local player  = Players.LocalPlayer
 local mouse   = player:GetMouse()
 local camera  = workspace.CurrentCamera
 
--- =====================
--- STATE
--- =====================
+
 local SPACE = 0x20
 
 local CONFIG = {
@@ -225,9 +219,7 @@ local CONFIG = {
     },
 }
 
--- =====================
--- NEXTBOT ESP
--- =====================
+
 local nextbotDrawings = {}
 
 local function ClearAllNextbotESP()
@@ -263,10 +255,7 @@ local playersFolder = nil
 -- Persistent seen table - reused every frame
 local _seen = {}
 
--- =====================
--- OPTIMIZATION: Cache children list, rebuild only when count changes
--- (Matcha does not support ChildAdded/ChildRemoved signals on Workspace instances)
--- =====================
+
 local cachedChildren      = {}
 local cachedChildCount    = -1
 local screenCX, screenCY  = 960, 540
@@ -277,9 +266,7 @@ local function RebuildChildrenCache()
     cachedChildCount = #cachedChildren
 end
 
--- =====================
--- OPTIMIZATION: Dirty-flag helpers to avoid redundant property writes
--- =====================
+
 -- We track last-written values per drawing and skip writes if unchanged.
 -- For vectors/sizes we store X and Y separately to avoid Vector2 allocation on compare.
 
@@ -482,9 +469,7 @@ local function UpdateNextbotESP()
     end
 end
 
--- =====================
--- UI
--- =====================
+
 -- Forward-declare so color callback in funnies tab can reference it
 local coneTriangles = {}
 
@@ -851,11 +836,7 @@ farmPos:addslider{
 local optionsTab = lib:tab("options")
 local uiSection  = optionsTab:section("ui settings", false)
 
--- =====================
--- CUSTOM THEMES
--- Build by deep-copying an existing theme and overriding its color values.
--- This ensures key names always match whatever Naska expects internally.
--- =====================
+
 local function _makeTheme(baseThemeName, overrides)
     local base = lib.themes[baseThemeName]
     if not base then return nil end
@@ -940,9 +921,12 @@ uiSection:adddropdown{
     end
 }
 
--- =====================
--- CONE HAT
--- =====================
+local creditsSection = optionsTab:section("credits", true)
+creditsSection:addbutton{ Name = "UI - EDU, Naskalib",          Callback = function() end }
+creditsSection:addbutton{ Name = "Dev - Jay",                   Callback = function() end }
+creditsSection:addbutton{ Name = "Cone Hat - crayonskidder",    Callback = function() end }
+
+
 local MAX_SEGS = 48
 
 -- Pre-allocate all triangles once
@@ -1087,9 +1071,7 @@ RunService.RenderStepped:Connect(function()
     drawConeHat(p.X, p.Y, p.Z)
 end)
 
--- =====================
--- BHOP LOOP
--- =====================
+
 local KEY_W = 0x57
 local KEY_A = 0x41
 local KEY_D = 0x44
@@ -1180,9 +1162,7 @@ spawn(function()
     ReleaseStrafeKeys()
 end)
 
--- =====================
--- AUTOFARM
--- =====================
+
 local _farmRecolecting = false
 local _farmWaiting     = false
 
@@ -1299,10 +1279,7 @@ spawn(function()
         end
     end
 end)
--- =====================
--- ESP LOOP — runs on its own cadence, separate from main loop
--- Increased to 0.07s (~14Hz) to reduce CPU pressure; still looks smooth
--- =====================
+
 spawn(function()
     while lib.running do
         if CONFIG.nextbotEsp.enabled then
@@ -1313,9 +1290,7 @@ spawn(function()
     ClearAllNextbotESP()
 end)
 
--- =====================
--- MAIN LOOP
--- =====================
+
 while lib.running do
     lib:step()
     task.wait()
