@@ -1,0 +1,236 @@
+
+## 1. Drawing (`drawing/drawing`)
+**URL:** https://matcha-latte.gitbook.io/matcha/luau-environment/drawing/drawing
+**Constructor:**
+- `Drawing.new(type: string): DrawingObject` -- Creates a new drawing object of the specified type
+**Supported drawing types:**
+- `Square`
+- `Line`
+- `Circle`
+- `Text`
+- `Triangle`
+No additional methods or properties beyond the constructor and the five supported types.
+---
+## 2. DrawingObject (`drawing/drawingobject`)
+**URL:** https://matcha-latte.gitbook.io/matcha/luau-environment/drawing/drawingobject
+**Method:**
+- `Remove(): nil` -- Eliminates the drawing object
+**Universal Properties (all drawing types):**
+| Property | Type |
+|---|---|
+| `Color` | Color3 |
+| `Transparency` | number |
+| `Visible` | bool |
+| `Position` | Vector2 |
+| `ZIndex` | int |
+**Type-Specific Properties:**
+- **Square:** `Size` (Vector2), `Filled` (bool)
+- **Line:** `From` (Vector2), `To` (Vector2), `Thickness` (int)
+- **Circle:** `Radius` (float), `NumSides` (int), `Thickness` (int)
+- **Text:** `Text` (string), `Outline` (bool), `Center` (bool), `Font` (Font object), `Size` (Int)
+- **Triangle:** `PointA` (Vector2), `PointB` (Vector2), `PointC` (Vector2)
+---
+## 3. Fonts (`drawing/fonts`)
+**URL:** https://matcha-latte.gitbook.io/matcha/luau-environment/drawing/fonts
+| Property | Font Name |
+|---|---|
+| `Drawing.Fonts.UI` | ProggyClean |
+| `Drawing.Fonts.System` | San Francisco |
+| `Drawing.Fonts.SystemBold` | SF Bold |
+| `Drawing.Fonts.Minecraft` | Minecraft |
+| `Drawing.Fonts.Monospace` | JetBrains |
+| `Drawing.Fonts.Pixel` | Pixel |
+| `Drawing.Fonts.Fortnite` | Fortnite |
+---
+## 4. Input Functions (`functions/input-functions`)
+**URL:** https://matcha-latte.gitbook.io/matcha/luau-environment/functions/input-functions
+**Input Control:**
+- `setrobloxinput(state: boolean)` -- Toggles sending inputs to the game
+- `isrbxactive(): bool` -- Determines if the current window is Roblox
+**Clipboard:**
+- `setclipboard(value: string)` -- Manages clipboard content
+**Keyboard Operations:**
+- `keypress(keycode: int)` -- Presses a key
+- `keyrelease(keycode: int)` -- Releases a key
+- `iskeypressed(keycode: int): bool` -- Checks key status
+**Mouse Button Functions:**
+- `ismouse1pressed(): bool` -- Queries left button state
+- `ismouse2pressed(): bool` -- Queries right button state
+- `mouse1press(): nil` -- Left button press
+- `mouse1release(): nil` -- Left button release
+- `mouse1click(): nil` -- Left button click
+- `mouse2press(): nil` -- Right button press
+- `mouse2release(): nil` -- Right button release
+- `mouse2click(): nil` -- Right button click
+**Mouse Movement:**
+- `mousemoveabs(x: int, y: int)` -- Absolute mouse positioning
+- `mousemoverel(x: int, y: int)` -- Relative mouse movement
+- `mousescroll(amount: int)` -- Scroll functionality
+---
+## 5. Memory Functions (`functions/memory-functions`)
+**URL:** https://matcha-latte.gitbook.io/matcha/luau-environment/functions/memory-functions
+**Warning:** Requires unsafe LuaU execution to be enabled.
+**Memory Types Table:**
+| Type | LuaU Return |
+|---|---|
+| int | integer |
+| float | float |
+| double | double |
+| byte | byte |
+| string | string |
+| uintptr_t | integer |
+**Functions:**
+- `getbase(): int` -- Returns `RobloxPlayerBeta.exe` base address
+- `memory_write(type: string, address: int, value: any): nil` -- Writes to memory at the given address. **Danger warning:** Ensure both memory address and address value are the correct type before writing. Improper usage may cause unexpected and dangerous behavior.
+- `memory_read(type: string, address: int): any` -- Reads the value from memory at the given address
+---
+## 6. Globals Functions (`functions/globals-functions`)
+**URL:** https://matcha-latte.gitbook.io/matcha/luau-environment/functions/globals-functions
+**Core Functions:**
+- `loadstring(chunk: string, chunkname: string): function | (nil, string)` -- Compiles Lua code and returns a function, or nil with error message
+- `decompile(script: Script): string` -- Decompiles a Script instance
+- `WorldToScreen(position: Vector3): Vector2` -- Converts 3D position to 2D screen coordinates
+**Notification & System:**
+- `notify(message: string, title: string, duration: number)` -- Displays a Matcha notification with customizable duration
+- `identifyexecutor(): (string, string)` -- Returns "Matcha" and version information
+- `getgetname(): string` -- Returns the current game name (note: this is how it appeared in the docs, likely `getgamename()`)
+**Script Analysis:**
+- `getscripts(): table` -- Returns all script instances in the game
+- `getscriptbytecode(script: Script): string` -- Retrieves raw bytecode from a script
+- `getscripthash(script: Script): string` -- Computes FNV-1a 64-bit hash of script bytecode
+**Encoding:**
+- `base64encode(data: string): string` -- Converts strings to Base64 format
+- `base64decode(data: string): string` -- Decodes Base64 strings to normal text
+---
+## 7. Miscellaneous Functions (`functions/miscellaneous-functions`)
+**URL:** https://matcha-latte.gitbook.io/matcha/luau-environment/functions/miscellaneous-functions
+- `run_secure(text: string)` -- Executes protected code. Note: "Code protection is not available to the public!"
+- `setfflag(FFlag: string, value: string)` -- Configures an FFlag with a specified value. Note: "This function is not complete!"
+- `getfflag(FFlag: string)` -- Retrieves an FFlag value. Note: "This function is not complete!"
+- `require(path: string): table` -- Loads and returns a module. Note: "Require only accepts files ending with `.lua` and `.luau`"
+- `wait(time: number)` -- Pauses execution for a specified duration
+- `spawn(target: function): nil` -- Executes a function asynchronously
+- `task.spawn(target: function): nil` -- Spawns a task to run a function asynchronously
+- `task.wait(time: number)` -- Pauses task execution for a specified time interval
+---
+## 8. Mouse (`classes/mouse`)
+**URL:** https://matcha-latte.gitbook.io/matcha/luau-environment/classes/mouse
+**Properties:**
+- `Mouse.X: number` -- The X coordinate
+- `Mouse.Y: number` -- The Y coordinate
+Minimal documentation -- only these two properties.
+---
+## 9. Players (`classes/players`)
+**URL:** https://matcha-latte.gitbook.io/matcha/luau-environment/classes/players
+**Properties:**
+- `Players.LocalPlayer: Player` -- Returns the current player instance
+**Methods:**
+- `Players:GetPlayers(): table` -- Retrieves all players
+**Events:**
+- `Players.PlayerAdded:Connect(function(player) ... end)` -- Fires when a player joins
+- `Players.PlayerRemoving:Connect(function(player) ... end)` -- Triggers when a player leaves
+---
+## 10. Player (`classes/player`)
+**URL:** https://matcha-latte.gitbook.io/matcha/luau-environment/classes/player
+**Properties:**
+- `Player.Character: Model` -- The character associated with a player
+- `Player.Team: Team` -- The team affiliation
+**Methods:**
+- `Player:GetMouse(): Mouse` -- Retrieves the mouse input object
+- `Players:GetPlayers(): table` -- Returns a collection of all active players (note: this also appears on this page)
+---
+## 11. Humanoid (`classes/humanoid`)
+**URL:** https://matcha-latte.gitbook.io/matcha/luau-environment/classes/humanoid
+**Properties:**
+- `Humanoid.MaxHealth: number` -- The maximum health value
+- `Humanoid.Health: number` -- The current health value
+Only these two properties documented, no methods.
+---
+## 12. Workspace (`classes/workspace`)
+**URL:** https://matcha-latte.gitbook.io/matcha/luau-environment/classes/workspace
+**Properties:**
+- `Workspace.CurrentCamera: Camera` -- Provides access to the Camera object
+Only one property documented.
+---
+## 13. Instance (`classes/instance`)
+**URL:** https://matcha-latte.gitbook.io/matcha/luau-environment/classes/instance
+**Properties:**
+- `Name: string` -- The instance identifier
+- `ClassName: string` -- The object's class type
+- `Parent: Instance` -- The containing instance
+- `Address: number` -- Hexadecimal number representing the Instance's memory address
+**Navigation Methods:**
+- `FindFirstChild(name: string): Instance`
+- `FindFirstChildOfClass(name: string): Instance`
+- `FindFirstChildWhichIsA(class: string): Instance`
+- `GetChildren(): { Instance }`
+- `GetDescendants(): { Instance }`
+- `WaitForChild(name: string): Instance`
+**Inspection Methods:**
+- `IsA(name: string): boolean`
+- `IsDescendantOf(parent: Instance): boolean`
+- `GetFullName(): string`
+**Attribute Management:**
+- `GetAttribute(name: string): any`
+- `GetAttributes(): { string }`
+- `SetAttribute(name: string, value: any): nil`
+---
+## 14. MeshPart (`classes/meshpart`)
+**URL:** https://matcha-latte.gitbook.io/matcha/luau-environment/classes/meshpart
+**Properties:**
+- `MeshPart.TextureId: string` -- Stores the texture identifier
+- `MeshPart.MeshId: string` -- Stores the mesh identifier
+Only these two properties, no methods.
+---
+## 15. DataModel (`classes/datamodel`)
+**URL:** https://matcha-latte.gitbook.io/matcha/luau-environment/classes/datamodel
+**Properties:**
+- `PlaceId: number`
+- `GameId: number`
+- `JobId: string`
+**Methods:**
+- `HttpGet(url: string, content: string): any` -- Performs an HTTP GET request
+- `GetService(name: string): Instance` -- Retrieves a service instance by name
+---
+## 16. Vector3 (`dataypes/vector3`)
+**URL:** https://matcha-latte.gitbook.io/matcha/luau-environment/dataypes/vector3
+**Description:** Represents a vector in 3D space, typically used as a point in 3D space or the dimensions of a rectangular prism.
+**Constructor:**
+- `Vector3.new(x: number, y: number, z: number)` -- Creates a new Vector3 instance
+**Properties:**
+- `X: number`
+- `Y: number`
+- `Z: number`
+---
+## 17. Vector2 (`dataypes/vector2`)
+**URL:** https://matcha-latte.gitbook.io/matcha/luau-environment/dataypes/vector2
+**Description:** Represents a 2D value with direction and magnitude, used in GUI elements and 2D mouse positioning.
+**Constructor:**
+- `Vector2.new(x: number, y: number)` -- Creates a Vector2 instance
+**Properties:**
+- `X: number`
+- `Y: number`
+---
+## 18. Color3 (`dataypes/color3`)
+**URL:** https://matcha-latte.gitbook.io/matcha/luau-environment/dataypes/color3
+**Description:** Represents colors using red, green, and blue components ranging from 0 to 1. Differs from BrickColor by enabling precise color control through object properties rather than named colors.
+**Constructors:**
+- `Color3.new(red: number, green: number, blue: number)` -- Creates with decimal RGB values (0-1 range)
+- `Color3.fromRGB(red: number, green: number, blue: number)` -- Creates from standard RGB values (0-255 range)
+- `Color3.fromHSV(hue: number, saturation: number, value: number)` -- Creates using HSV components
+- `Color3.fromHex(hex: string)` -- Creates from hexadecimal notation
+**Properties:**
+- `R: number` -- Red component
+- `G: number` -- Green component
+- `B: number` -- Blue component
+---
+That covers all 18 documentation pages. A few observations that may be relevant for your cross-referencing:
+1. **Sparse documentation on some pages:** Mouse, Humanoid, Workspace, and MeshPart pages are quite minimal (only 1-2 properties each, no methods or examples).
+2. **Possible typo in globals:** The function `getgetname()` likely should be `getgamename()` based on its description ("Returns the current game name").
+3. **Duplicate entry:** `Players:GetPlayers()` appears on both the Players page and the Player page.
+4. **Incomplete functions noted:** `setfflag` and `getfflag` are explicitly marked as "not complete" in the docs.
+5. **Memory functions require unsafe mode:** The memory functions page has a prerequisite warning about enabling unsafe LuaU execution.
+6. **URL path has a typo:** The datatypes section uses `dataypes` (missing the 't') in the URL path -- this is consistent across Vector3, Vector2, and Color3.
+agentId: abe7b76 (for resuming to continue this agent's work if needed)
+<usage>total_tokens: 30393
+tool_uses: 18
