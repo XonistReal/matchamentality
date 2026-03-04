@@ -1,46 +1,3 @@
---[[
-    UILib v1.0.4  +  ESP Base
-    ─────────────────────────────────────────────────────────────
-    Drop this file into any script as a base.
-    It contains:
-      • The full UILib menu system (tabs, sections, all widgets)
-      • ESP drawing-pool utilities + renderEsp()
-
-    Quick-start pattern
-    ───────────────────
-        -- 1. Set menu up
-        UILib:SetMenuTitle("My Script")
-        UILib:SetMenuSize(Vector2.new(540, 480))
-        UILib:CenterMenu()
-
-        -- 2. Build your tabs / sections / widgets
-        local espTab  = UILib:Tab("ESP")
-        local espSec  = espTab:Section("General")
-        espSec:Toggle("Enable", false, function(v) espCfg.enabled = v end)
-
-        -- 3. Optional built-in settings tab
-        UILib:CreateSettingsTab()
-
-        -- 4. Main loop
-        local shouldDie = false
-        while not shouldDie do
-            if espCfg.enabled and not UILib._menu_open then
-                pcall(renderEsp, espCfg)
-            else
-                ESP.hideAll()
-            end
-            UILib:Step()
-        end
-
-        ESP.destroyAll()
-        UILib:Unload()
-
-    See DOCS.md for the full API reference.
-]]
-
--- ============================================================
--- UILIB CORE
--- ============================================================
 
 UILib = {
     _font_face = Drawing.Fonts.UI,
@@ -517,7 +474,6 @@ do
         }
     end
 
-    -- ── Public API ───────────────────────────────────────────
 
     function UILib:GetMenuSize()
         return Vector2.new(self.w, self.h)
@@ -649,7 +605,7 @@ do
         setrobloxinput(true)
     end
 
-    -- ── Step() — call every frame in your main loop ──────────
+
     function UILib:Step()
         local menuTitle = self._custom_title_enabled and self._custom_title or self.title
 
@@ -874,7 +830,7 @@ do
                 clickFrame = false
             end
 
-            -- menu shell + tabs + sections — (full rendering logic, same as source)
+            -- menu shell + tabs + sections — (full rendering logic)
             local menuTitleSize = self:_GetTextBounds(menuTitle)
 
             self:_Draw('menu_crust',            'rect', self._theming.crust,   1, Vector2.new(self.x, self.y), Vector2.new(self.w, self.h), false)
@@ -938,7 +894,10 @@ do
 
             local tabNames = {}
             for k in pairs(self._tree) do table.insert(tabNames, k) end
-            table.sort(tabNames)
+            local _tabOrder = {Utils=1, Autofarm=2, ESP=3, Funnies=4, Credits=5, Settings=6}
+            table.sort(tabNames, function(a, b)
+                return (_tabOrder[a] or 99) < (_tabOrder[b] or 99)
+            end)
 
             for _, tabName in ipairs(tabNames) do
                 local tabContent = self._tree[tabName]
@@ -993,13 +952,15 @@ do
                 local clipBottom = bodyContentPos.y + bodyContentSize.y
 
                 local sectionIter = 0
-                local sectionWidth = contentW/2 - self._padding * 1.5
+                local sectionCount = 0
+                for _ in pairs(tabContent._items) do sectionCount = sectionCount + 1 end
+                local sectionWidth = sectionCount == 1 and (contentW - self._padding * 2) or (contentW/2 - self._padding * 1.5)
                 local totalSectionHeightR = self._padding * 1.5
                 local totalSectionHeightL = self._padding * 1.5
 
                 for sectionName, sectionContent in pairs(tabContent._items) do
                     local sectionDrawId = 'menu_section_' .. tabName:gsub('%W','_') .. '_' .. sectionName:gsub('%W','_')
-                    local isSectionMirror = sectionIter % 2 == 1
+                    local isSectionMirror = sectionCount > 1 and sectionIter % 2 == 1
                     local sectionTitleSize = self:_GetTextBounds(sectionName)
                     local sectionPos = Vector2.new(contentX, bodyContentPos.y + self._padding)
                     local sectionHeight = self._padding + sectionTitleSize.y/2
@@ -1140,39 +1101,10 @@ do
                                     local labelSize = self:_GetTextBounds(sectionItem.label)
                                     local labelPosition = sectionItemOrigin + Vector2.new(tickSize.x + self._padding, 0)
 
-                                    if sectionItem.tooltip then
-                                        local hintSize = self:_GetTextBounds('(?)', nil, 10)
-                                        local hintPosition = labelPosition + Vector2.new(labelSize.x + hintSize.x - 4, hintSize.y / 2)
-                                        local isHoveringHint = self:_IsMouseWithinBounds(hintPosition - Vector2.new(3,3), hintSize + Vector2.new(6,6))
-                                        if isHoveringHint then
-                                            local mousePos = self:_GetMousePos()
-                                            if not self._tooltip_mouse_prev then
-                                                self._tooltip_mouse_prev = mousePos
-                                                self._tooltip_hover_time = os.clock()
-                                            elseif self._tooltip_mouse_prev.x ~= mousePos.x then
-                                                self._tooltip_mouse_prev = nil
-                                                self._tooltip_hover_time = nil
-                                            elseif os.clock() - self._tooltip_hover_time > 0.2 then
-                                                local tooltipFade = 1 - ((self._tooltip_hover_time + 0.2) - (os.clock() - 0.25)) / 0.25
-                                                if tooltipFade < 1.1 then
-                                                    self:_SetOpacityStartsWith('menu_tooltip', math.abs((self._menu_open and 0 or 1) - clamp(tooltipFade,0,1)))
-                                                end
-                                                local tooltipOrigin = Vector2.new(mousePos.x + 11, mousePos.y)
-                                                local tooltipSize   = self:_GetTextBounds(sectionItem.tooltip)
-                                                self:_Draw('menu_tooltip_body',   'rect', self._theming.surface1, 1000, tooltipOrigin, tooltipSize + Vector2.new(self._padding, self._padding), true)
-                                                self:_Draw('menu_tooltip_crust',  'rect', self._theming.crust,    1001, tooltipOrigin, tooltipSize + Vector2.new(self._padding, self._padding), false)
-                                                self:_Draw('menu_tooltip_border', 'rect', self._theming.border1,  1002, tooltipOrigin + Vector2.new(1,1), tooltipSize + Vector2.new(self._padding-2, self._padding-2), false)
-                                                self:_Draw('menu_tooltip_text',   'text', self._theming.text,     1003, tooltipOrigin + Vector2.new(3, tooltipSize.y/2), sectionItem.tooltip, true)
-                                            end
-                                        else
-                                            self:_UndrawStartsWith('menu_tooltip')
-                                        end
-                                        self:_Draw(sectionItemId .. '_hint', 'text', self._theming.subtext, 21, hintPosition, '(?)', true, 'center', 10)
-                                    end
-
                                     local maxLabelW = sectionWidth - tickSize.x - self._padding * 3
                                     if itemKeybind then maxLabelW = maxLabelW - 40
                                     elseif itemColorpicker and not itemColorpicker.overwrite then maxLabelW = maxLabelW - tickSize.x * 2 - self._padding end
+
                                     local clampedLabel = sectionItem.label
                                     while #clampedLabel > 1 and self:_GetTextBounds(clampedLabel).x > maxLabelW do
                                         clampedLabel = clampedLabel:sub(1, -2)
@@ -1507,33 +1439,6 @@ do
     end
 end
 
--- ============================================================
--- ESP UTILITIES
--- ============================================================
--- All functions are local. ESP state is managed via a config
--- table you create and pass to renderEsp().
---
--- Default config shape:
---[[
-    local espCfg = {
-        enabled    = false,
-        box        = true,
-        boxType    = "Corner",   -- "Corner" | "Full" | "Filled"
-        name       = true,
-        distance   = true,
-        health     = true,
-        healthBar  = true,
-        tool       = true,
-        self       = false,      -- show own ESP
-        teamColor  = false,
-        -- colors
-        colorBox      = Color3.fromRGB(220, 50,  50),
-        colorName     = Color3.fromRGB(255, 255, 255),
-        colorDist     = Color3.fromRGB(180, 180, 180),
-        colorTool     = Color3.fromRGB(255, 220,  50),
-    }
-]]
-
 local _espPools = {}
 
 local function _getOrCreate(pool, key, dtype)
@@ -1681,7 +1586,7 @@ end
 ESP = {}
 
 --- Render ESP for all players. Call every frame when espCfg.enabled is true.
---- @param cfg table  Your espCfg table (see shape at top of ESP section)
+--- @param cfg table  espCfg table (see shape at top of ESP section)
 function renderEsp(cfg)
     local Players    = game:GetService('Players')
     local LocalPlayer = Players.LocalPlayer
@@ -1997,6 +1902,251 @@ local camera  = workspace.CurrentCamera
 
 local SPACE = 0x20
 
+
+
+local SAVE_PATH     = "evade_config.json"
+local DEBOUNCE_SECS = 1.5
+
+local LocalConfig = {}
+local _rawConfig  = nil
+local _saveCo     = nil
+
+-- ── Tiny JSON encoder ─────────────────────────────────────────
+local function _enc(v, seen)
+    local t = type(v)
+    if t == "nil"     then return "null"
+    elseif t == "boolean" then return v and "true" or "false"
+    elseif t == "number"  then
+        if v ~= v or v == math.huge or v == -math.huge then return "0" end
+        if v == math.floor(v) and math.abs(v) < 1e15 then
+            return string.format("%d", v)
+        end
+        return string.format("%.8g", v)
+    elseif t == "string" then
+        local s = v:gsub("\\", "\\\\")
+        s = s:gsub('"', '\\"')
+        s = s:gsub("\n", "\\n")
+        s = s:gsub("\r", "\\r")
+        s = s:gsub("\t", "\\t")
+        return '"' .. s .. '"'
+    elseif t == "table" then
+        seen = seen or {}
+        if seen[v] then return "null" end
+        seen[v] = true
+        -- Color3 detection
+        if type(v.R)=="number" and type(v.G)=="number" and type(v.B)=="number" then
+            local s = string.format('{"_c3":1,"r":%.6f,"g":%.6f,"b":%.6f}', v.R, v.G, v.B)
+            seen[v] = nil; return s
+        end
+        local parts = {}
+        if #v > 0 then
+            for i=1,#v do parts[i] = _enc(v[i], seen) end
+            seen[v] = nil
+            return "[" .. table.concat(parts,",") .. "]"
+        else
+            local i = 0
+            for k,val in pairs(v) do
+                local vt = type(val)
+                if vt=="boolean" or vt=="number" or vt=="string" or vt=="table" then
+                    i=i+1; parts[i] = '"'..tostring(k)..'":'.. _enc(val,seen)
+                end
+            end
+            seen[v] = nil
+            return "{" .. table.concat(parts,",") .. "}"
+        end
+    end
+    return "null"
+end
+
+-- ── Tiny JSON decoder ─────────────────────────────────────────
+local function _skipWS(s,i)
+    while i<=#s do
+        local c=s:sub(i,i)
+        if c==" " or c=="\t" or c=="\n" or c=="\r" then i=i+1 else break end
+    end
+    return i
+end
+local _dec
+_dec = function(s,i)
+    i = _skipWS(s,i)
+    if i>#s then return nil,i end
+    local c = s:sub(i,i)
+    if c=="n" then return nil,i+4
+    elseif c=="t" then return true,i+4
+    elseif c=="f" then return false,i+5
+    elseif c=='"' then
+        local j,buf = i+1,{}
+        while j<=#s do
+            local ch=s:sub(j,j)
+            if ch=='"' then return table.concat(buf),j+1
+            elseif ch=="\\" then
+                local nx=s:sub(j+1,j+1)
+                if     nx=='"' then buf[#buf+1]='"'
+                elseif nx=="\\" then buf[#buf+1]="\\"
+                elseif nx=="n"   then buf[#buf+1]="\n"
+                elseif nx=="r"   then buf[#buf+1]="\r"
+                elseif nx=="t"   then buf[#buf+1]="\t"
+                else                  buf[#buf+1]=nx
+                end
+                j=j+2
+            else buf[#buf+1]=ch; j=j+1 end
+        end
+        return table.concat(buf),j
+    elseif c=='[' then
+        local arr,j = {},i+1
+        j=_skipWS(s,j)
+        if s:sub(j,j)==']' then return arr,j+1 end
+        while true do
+            local val; val,j=_dec(s,j); arr[#arr+1]=val
+            j=_skipWS(s,j)
+            if s:sub(j,j)==']' then return arr,j+1 end
+            j=j+1
+        end
+    elseif c=='{' then
+        local obj,j = {},i+1
+        j=_skipWS(s,j)
+        if s:sub(j,j)=='}' then return obj,j+1 end
+        while true do
+            local key; key,j=_dec(s,j)
+            j=_skipWS(s,j)+1
+            local val; val,j=_dec(s,j)
+            obj[key]=val
+            j=_skipWS(s,j)
+            if s:sub(j,j)=='}' then
+                if obj["_c3"] and obj["r"] and obj["g"] and obj["b"] then
+                    return Color3.new(obj["r"],obj["g"],obj["b"]),j+1
+                end
+                return obj,j+1
+            end
+            j=j+1
+        end
+    else
+        local numStr = s:match("^%-?%d+%.?%d*[eE]?[%+%-]?%d*",i)
+        if numStr then return tonumber(numStr),i+#numStr end
+        return nil,i+1
+    end
+end
+
+-- ── Snapshot / apply ──────────────────────────────────────────
+local function _snapshot()
+    local snap = {}
+    for section,data in pairs(_rawConfig) do
+        if type(data)=="table" then
+            snap[section]={}
+            for k,v in pairs(data) do
+                local vt=type(v)
+                if vt=="boolean" or vt=="number" or vt=="string" then
+                    snap[section][k]=v
+                elseif vt=="table" and type(v.R)=="number" then
+                    snap[section][k]=v  -- Color3
+                end
+            end
+        end
+    end
+    return snap
+end
+
+local function _applySnapshot(snap)
+    for section,data in pairs(snap) do
+        local target = _rawConfig[section]
+        if target and type(data)=="table" then
+            for k,v in pairs(data) do
+                -- Apply saved value if the key exists in current CONFIG schema
+                -- (guards against stale keys from old saves)
+                if rawget(target, k) ~= nil or target[k] ~= nil then
+                    target[k] = v
+                end
+            end
+        end
+    end
+end
+
+-- ── Flush to disk ────────────────────────────────────────────
+local function _flush()
+    local ok, err = pcall(function()
+        local json = _enc(_snapshot())
+        writefile(SAVE_PATH, json)
+    end)
+    if not ok then
+    else
+    end
+end
+
+-- ── Debounced save ────────────────────────────────────────────
+local function _scheduleSave()
+    if _saveCo then return end
+    _saveCo = spawn(function()
+        task.wait(DEBOUNCE_SECS)
+        _saveCo = nil
+        _flush()
+    end)
+end
+
+-- ── Proxy factory ────────────────────────────────────────────
+local function _makeProxy(sectionData)
+    return setmetatable({}, {
+        __index    = sectionData,
+        __newindex = function(_,k,v) sectionData[k]=v; _scheduleSave() end,
+        __pairs    = function(_) return pairs(sectionData) end,
+    })
+end
+
+-- ── Public API ───────────────────────────────────────────────
+function LocalConfig.init(rawCfg)
+    _rawConfig = rawCfg
+    local proxy = {}
+    for section,data in pairs(rawCfg) do
+        if type(data)=="table" then proxy[section] = _makeProxy(data)
+        else proxy[section] = data end
+    end
+    return proxy
+end
+
+function LocalConfig.load()
+
+    if not isfile(SAVE_PATH) then
+        return "new"
+    end
+
+    -- Schema migration: if save predates keybinds/ui sections, wipe it so
+    -- we start clean rather than loading an incomplete config.
+    do
+        local raw = readfile(SAVE_PATH)
+        if not raw:find('"keybinds"') or not raw:find('"ui"') then
+            delfile(SAVE_PATH)
+            return "new"
+        end
+    end
+
+    local ok, result = pcall(function()
+        return readfile(SAVE_PATH)
+    end)
+
+    if not ok then
+        return "error"
+    end
+
+
+    local decOk, snap = pcall(function()
+        local decoded, _ = _dec(result, 1)
+        return decoded
+    end)
+
+    if not decOk then
+        return "error"
+    end
+    if type(snap) ~= "table" then
+        return "error"
+    end
+
+    _applySnapshot(snap)
+    return "ok"
+end
+
+function LocalConfig.save()
+    spawn(_flush)
+end
+-- ============================================================
 local CONFIG = {
     bhop = {
         enabled      = false,
@@ -2044,10 +2194,437 @@ local CONFIG = {
         maxDist     = 500,
         minBoxSize  = 20,
     },
+    velIndicator = {
+        enabled = false,
+    },
+    crosshair = {
+        enabled  = false,
+        style    = "Cross",   -- "Dot", "Cross", "Circle"
+        size     = 8,
+        gap      = 4,
+        thickness= 1,
+        color    = Color3.fromRGB(255, 255, 255),
+    },
+    noclip = {
+        enabled = false,
+    },
+    fly = {
+        enabled = false,
+        speed   = 50,
+    },
+    highJump = {
+        enabled = false,
+        force   = 80,
+    },
+    antiVoid = {
+        enabled   = false,
+        threshold = -100,  -- Y below this triggers teleport
+        safeY     = 5,
+    },
+    botDodge = {
+        enabled   = false,
+        radius    = 15,   -- studs — teleport away if nextbot is within this
+        dodgeDist = 8,    -- studs to teleport directly away from the bot
+        cooldown  = 0.5,  -- seconds between dodge triggers
+    },
+    -- Keybind names (string key names matching UILib._inputs keys, or nil)
+    keybinds = {
+        bhopKey      = "none",   bhopMode      = "Hold",
+        noclipKey    = "none",   noclipMode    = "Hold",
+        flyKey       = "none",   flyMode       = "Hold",
+        highJumpKey  = "none",   highJumpMode  = "Hold",
+    },
+    -- Dropdown + UI selections saved as strings
+    ui = {
+        boxColor       = "Red",
+        nameColor      = "White",
+        distColor      = "Yellow",
+        lineColor      = "Red",
+        hatColor       = "Black",
+        crosshairStyle = "Cross",
+        crosshairColor = "White",
+    },
 }
 
+-- ── Config system: wrap CONFIG with auto-save proxy ────────────
+CONFIG = LocalConfig.init(CONFIG)
+do
+    local loadResult = LocalConfig.load()
+    spawn(function()
+        task.wait(1)  -- wait for UILib to be ready for notifications
+        if loadResult == "ok" then
+            UILib:Notification("Config loaded!", 3)
+        elseif loadResult == "new" then
+            -- First ever run — nothing saved yet, this is normal
+            UILib:Notification("First run! Settings will auto-save as you change them.", 5)
+            LocalConfig.save()  -- save defaults immediately so next load works
+        elseif loadResult == "error" then
+            UILib:Notification("Config load failed — check console for details.", 5)
+        end
+    end)
+end
+
+do
+    local _cv = {
+        Red={255,60,60}, Orange={255,140,0}, Yellow={255,220,0}, Green={60,255,60},
+        Cyan={0,220,255}, Blue={60,100,255}, Purple={180,60,255},
+        White={255,255,255}, Pink={255,100,180}, Black={0,0,0},
+    }
+    local function _c(name) local t=_cv[name]; return t and Color3.fromRGB(t[1],t[2],t[3]) or Color3.fromRGB(255,255,255) end
+    -- Use _rawConfig directly so we bypass proxy (avoids triggering an auto-save on startup)
+    local raw = CONFIG  -- proxy __index passes through to rawConfig reads fine
+    CONFIG.nextbotEsp.boxColor  = _c(CONFIG.ui.boxColor)
+    CONFIG.nextbotEsp.nameColor = _c(CONFIG.ui.nameColor)
+    CONFIG.nextbotEsp.distColor = _c(CONFIG.ui.distColor)
+    CONFIG.nextbotEsp.lineColor = _c(CONFIG.ui.lineColor)
+    CONFIG.coneHat.color        = _c(CONFIG.ui.hatColor)
+    CONFIG.crosshair.style      = CONFIG.ui.crosshairStyle
+    CONFIG.crosshair.color      = _c(CONFIG.ui.crosshairColor)
+end
 
 local nextbotDrawings = {}
+
+-- ── Crosshair ────────────────────────────────────────────────
+local _chDrawings = {
+    dot    = Drawing.new("Square"),
+    top    = Drawing.new("Square"),
+    bottom = Drawing.new("Square"),
+    left   = Drawing.new("Square"),
+    right  = Drawing.new("Square"),
+    circle = Drawing.new("Circle"),
+}
+_chDrawings.dot.Filled    = true
+_chDrawings.top.Filled    = true
+_chDrawings.bottom.Filled = true
+_chDrawings.left.Filled   = true
+_chDrawings.right.Filled  = true
+_chDrawings.circle.Filled = false
+for _, d in pairs(_chDrawings) do d.Visible = false end
+
+local function _crosshairUpdate()
+    local cfg = CONFIG.crosshair
+    local ss  = UILib:_GetScreenSize()
+    local cx  = ss.X / 2
+    local cy  = ss.Y / 2
+    local col = cfg.color
+
+    -- hide all first
+    for _, d in pairs(_chDrawings) do d.Visible = false end
+
+    if not cfg.enabled then return end
+
+    if cfg.style == "Dot" then
+        local d = _chDrawings.dot
+        local r = cfg.size / 2
+        d.Color    = col
+        d.Size     = Vector2.new(cfg.size, cfg.size)
+        d.Position = Vector2.new(cx - r, cy - r)
+        d.Visible  = true
+
+    elseif cfg.style == "Cross" then
+        local s   = cfg.size
+        local g   = cfg.gap
+        local th  = cfg.thickness
+        -- top
+        local t = _chDrawings.top
+        t.Color = col; t.Size = Vector2.new(th, s)
+        t.Position = Vector2.new(cx - th/2, cy - g - s)
+        t.Visible = true
+        -- bottom
+        local b = _chDrawings.bottom
+        b.Color = col; b.Size = Vector2.new(th, s)
+        b.Position = Vector2.new(cx - th/2, cy + g)
+        b.Visible = true
+        -- left
+        local l = _chDrawings.left
+        l.Color = col; l.Size = Vector2.new(s, th)
+        l.Position = Vector2.new(cx - g - s, cy - th/2)
+        l.Visible = true
+        -- right
+        local r = _chDrawings.right
+        r.Color = col; r.Size = Vector2.new(s, th)
+        r.Position = Vector2.new(cx + g, cy - th/2)
+        r.Visible = true
+
+    elseif cfg.style == "Circle" then
+        local c = _chDrawings.circle
+        c.Color     = col
+        c.Radius    = cfg.size
+        c.Thickness = cfg.thickness
+        c.Position  = Vector2.new(cx, cy)
+        c.Visible   = true
+    end
+end
+
+local function _crosshairClear()
+    for _, d in pairs(_chDrawings) do d.Visible = false end
+end
+-- ─────────────────────────────────────────────────────────────
+
+-- ── Noclip ───────────────────────────────────────────────────
+-- Noclip works by hijacking the fly velocity override (same mechanism).
+-- The spawn loop below is kept but is a no-op since _flyUpdate handles it.
+local _noclipKeyName = (CONFIG.keybinds.noclipKey ~= "none") and CONFIG.keybinds.noclipKey or nil
+local _noclipKeyMode = CONFIG.keybinds.noclipMode
+local _noclipToggled = false
+local _noclipWasHeld = false
+local function _noclipUpdate()
+    -- intentional no-op: noclip is handled inside _flyUpdate when noclip enabled
+end
+spawn(function()
+    while not shouldDie do
+        task.wait()
+    end
+end)
+-- ─────────────────────────────────────────────────────────────
+
+-- ── Fly ──────────────────────────────────────────────────────
+local _flyKeyName  = (CONFIG.keybinds.flyKey ~= "none") and CONFIG.keybinds.flyKey or nil
+local _flyKeyMode  = CONFIG.keybinds.flyMode
+local _flyToggled  = false
+local _flyWasHeld  = false
+local function _flyUpdate()
+    -- active if noclip keybind active, OR fly enabled+keybind active
+    local active = false
+    if CONFIG.noclip.enabled then
+        if _noclipKeyMode == "Always" then
+            active = true
+        elseif _noclipKeyName then
+            local held = UILib._inputs[_noclipKeyName] and UILib._inputs[_noclipKeyName].held
+            if _noclipKeyMode == "Toggle" then
+                if held and not _noclipWasHeld then _noclipToggled = not _noclipToggled end
+                _noclipWasHeld = held
+                active = _noclipToggled
+            else
+                active = held
+            end
+        else
+            active = true  -- no key bound = always on when toggle enabled
+        end
+    elseif CONFIG.fly.enabled then
+        if _flyKeyMode == "Always" then
+            active = true
+        elseif _flyKeyName then
+            local held = UILib._inputs[_flyKeyName] and UILib._inputs[_flyKeyName].held
+            if _flyKeyMode == "Toggle" then
+                if held and not _flyWasHeld then _flyToggled = not _flyToggled end
+                _flyWasHeld = held
+                active = _flyToggled
+            else
+                active = held
+            end
+        end
+    end
+
+    if not active then return end
+    local char = player.Character
+    local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    local spd = CONFIG.fly.speed
+    local vx, vy, vz = 0, 0, 0
+
+    local cam = workspace.CurrentCamera
+    local dx  = hrp.Position.X - cam.Position.X
+    local dz  = hrp.Position.Z - cam.Position.Z
+    local len = math.sqrt(dx*dx + dz*dz)
+    if len > 0 then dx = dx/len; dz = dz/len end
+    local rx, rz = -dz, dx
+
+    if UILib._inputs['w'].held     then vx = vx + dx*spd;  vz = vz + dz*spd  end
+    if UILib._inputs['s'].held     then vx = vx - dx*spd;  vz = vz - dz*spd  end
+    if UILib._inputs['a'].held     then vx = vx - rx*spd;  vz = vz - rz*spd  end
+    if UILib._inputs['d'].held     then vx = vx + rx*spd;  vz = vz + rz*spd  end
+    if not CONFIG.noclip.enabled then
+        if UILib._inputs['space'].held then vy =  spd end
+        if UILib._inputs['lctrl'].held then vy = -spd end
+    end
+
+    pcall(function()
+        hrp.AssemblyLinearVelocity = Vector3.new(vx, vy, vz)
+    end)
+end
+
+local _hjKeyName  = (CONFIG.keybinds.highJumpKey ~= "none") and CONFIG.keybinds.highJumpKey or nil
+local _hjKeyMode  = CONFIG.keybinds.highJumpMode
+local _hjToggled  = false
+local _hjWasHeld  = false
+local function _highJumpUpdate()
+    if not CONFIG.highJump.enabled then return end
+
+    local active = false
+    if _hjKeyMode == "Always" then
+        active = true
+    elseif _hjKeyName then
+        local held = UILib._inputs[_hjKeyName] and UILib._inputs[_hjKeyName].held
+        if _hjKeyMode == "Toggle" then
+            if held and not _hjWasHeld then _hjToggled = not _hjToggled end
+            _hjWasHeld = held
+            active = _hjToggled
+        else -- Hold
+            active = held
+        end
+    end
+
+    if not active then return end
+    local char = player.Character
+    local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local spaceHeld = UILib._inputs['space'].held
+    if spaceHeld and not _hjWasHeld then
+        pcall(function()
+            hrp.AssemblyLinearVelocity = Vector3.new(
+                hrp.AssemblyLinearVelocity.X,
+                CONFIG.highJump.force,
+                hrp.AssemblyLinearVelocity.Z
+            )
+        end)
+    end
+    _hjWasHeld = spaceHeld
+end
+
+local function _antiVoidUpdate()
+    if not CONFIG.antiVoid.enabled then return end
+    local char = player.Character
+    local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    if hrp.Position.Y < CONFIG.antiVoid.threshold then
+        pcall(function()
+            hrp.Position = Vector3.new(hrp.Position.X, CONFIG.antiVoid.safeY, hrp.Position.Z)
+            hrp.Velocity = Vector3.new(0, 0, 0)
+        end)
+    end
+end
+
+local _botDodgeLastTrig = 0
+
+
+
+local _VEL_SAMPLES  = 200    -- how many data points to keep
+local _VEL_W        = 200    -- graph width  (px)
+local _VEL_H        = 60     -- graph height (px)
+local _VEL_MARGIN_X = 12     -- distance from right edge of screen
+local _VEL_MARGIN_Y = 12     -- distance from bottom edge of screen
+local _VEL_MAX_DISP = 60     -- speed value that fills the graph top (studs/s)
+
+local _velSamples   = {}     -- ring buffer of speed values
+local _velHead      = 0      -- current write index (1-based after first fill)
+local _velFilled    = 0      -- how many slots are actually filled
+
+-- pre-fill with zeros
+for i = 1, _VEL_SAMPLES do _velSamples[i] = 0 end
+
+-- drawing objects (created once)
+local _velBg    = Drawing.new("Square")
+_velBg.Filled   = true
+_velBg.Color    = Color3.fromRGB(0, 0, 0)
+_velBg.Transparency = 0.45
+_velBg.Visible  = false
+
+local _velBorder = Drawing.new("Square")
+_velBorder.Filled = false
+_velBorder.Thickness = 1
+_velBorder.Color  = Color3.fromRGB(35, 45, 65)
+_velBorder.Visible = false
+
+local _velLabel = Drawing.new("Text")
+_velLabel.Outline = true
+_velLabel.Size    = 11
+_velLabel.Color   = Color3.fromRGB(220, 228, 240)
+_velLabel.Visible = false
+
+local _velLines = {}
+for i = 1, _VEL_SAMPLES - 1 do
+    local ln = Drawing.new("Line")
+    ln.Thickness = 1.5
+    ln.Color     = Color3.fromRGB(77, 166, 255)
+    ln.Visible   = false
+    _velLines[i] = ln
+end
+
+local function _velMagnitude(v)
+    return math.sqrt(v.X*v.X + v.Y*v.Y + v.Z*v.Z)
+end
+
+local function _velClearAll()
+    _velBg.Visible     = false
+    _velBorder.Visible = false
+    _velLabel.Visible  = false
+    for _, ln in ipairs(_velLines) do ln.Visible = false end
+end
+
+local function _velUpdate()
+    if not CONFIG.velIndicator.enabled then
+        _velClearAll()
+        return
+    end
+
+    -- sample current speed
+    local char  = player.Character
+    local hrp   = char and char:FindFirstChild("HumanoidRootPart")
+    local speed = 0
+    if hrp then
+        local vel = hrp.AssemblyLinearVelocity
+        if vel then speed = _velMagnitude(vel) end
+    end
+
+    _velHead = (_velHead % _VEL_SAMPLES) + 1
+    _velSamples[_velHead] = speed
+    if _velFilled < _VEL_SAMPLES then _velFilled = _velFilled + 1 end
+
+    -- figure out screen position (bottom-right anchor)
+    local ss  = UILib:_GetScreenSize()
+    local gx  = ss.X - _VEL_W - _VEL_MARGIN_X
+    local gy  = ss.Y - _VEL_H - _VEL_MARGIN_Y
+
+    -- background + border
+    _velBg.Position     = Vector2.new(gx, gy)
+    _velBg.Size         = Vector2.new(_VEL_W, _VEL_H)
+    _velBg.Visible      = true
+
+    _velBorder.Position = Vector2.new(gx, gy)
+    _velBorder.Size     = Vector2.new(_VEL_W, _VEL_H)
+    _velBorder.Visible  = true
+
+    -- label: current speed
+    _velLabel.Text     = string.format("%.1f s/u", speed)
+    _velLabel.Position = Vector2.new(gx + 4, gy + 2)
+    _velLabel.Visible  = true
+
+    -- draw the graph lines oldest→newest left→right
+    local n      = _VEL_SAMPLES
+    local pad    = 4
+    local innerW = _VEL_W - pad * 2
+    local innerH = _VEL_H - pad * 2 - 14   -- leave room for label at top
+
+    local function sampleAt(i)
+        -- i=1 is the oldest, i=n is the newest
+        local idx = ((_velHead - n + i - 1) % n) + 1
+        return _velSamples[idx] or 0
+    end
+
+    for i = 1, n - 1 do
+        local s1 = sampleAt(i)
+        local s2 = sampleAt(i + 1)
+
+        local x1 = gx + pad + (i - 1) / (n - 1) * innerW
+        local x2 = gx + pad + i       / (n - 1) * innerW
+        local y1 = gy + _VEL_H - pad - (math.min(s1, _VEL_MAX_DISP) / _VEL_MAX_DISP) * innerH
+        local y2 = gy + _VEL_H - pad - (math.min(s2, _VEL_MAX_DISP) / _VEL_MAX_DISP) * innerH
+
+        local ln = _velLines[i]
+        -- tint hotter when faster
+        local t = math.min(speed / _VEL_MAX_DISP, 1)
+        ln.Color   = Color3.fromRGB(
+            math.floor(77  + (255 - 77)  * t),
+            math.floor(166 - 166         * t),
+            math.floor(255 - 255         * t))
+        ln.From    = Vector2.new(x1, y1)
+        ln.To      = Vector2.new(x2, y2)
+        ln.Visible = true
+    end
+end
+-- ─────────────────────────────────────────────────────────────
 
 local function ClearAllNextbotESP()
     for _, entry in pairs(nextbotDrawings) do
@@ -2071,10 +2648,104 @@ local function HideAllESP()
 end
 
 -- Cache player names
+-- Periodically rebuild the real-player name set so we never ESP them.
+-- Runs every 5 seconds so newly joined players are caught quickly.
 local playerNamesCache = {}
-Players.PlayerAdded:Connect(function(p) playerNamesCache[p.Name] = true end)
-Players.PlayerRemoving:Connect(function(p) playerNamesCache[p.Name] = nil end)
-for _, p in ipairs(Players:GetPlayers()) do playerNamesCache[p.Name] = true end
+local function _rebuildPlayerCache()
+    local fresh = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        fresh[p.Name] = true
+    end
+    playerNamesCache = fresh
+end
+
+-- ── Bot Dodge ────────────────────────────────────────────────
+local _dodgeFolder = nil
+
+local function _botDodgeUpdate()
+    local cfg = CONFIG.botDodge
+    if not cfg.enabled then return end
+
+    local now = os.clock()
+    if now - _botDodgeLastTrig < cfg.cooldown then return end
+
+    -- Find bots folder independently (doesn't require ESP to be on)
+    if not _dodgeFolder then
+        local g = workspace:FindFirstChild("Game")
+        _dodgeFolder = g and g:FindFirstChild("Players") or nil
+        if not _dodgeFolder then return end
+    end
+
+    -- Re-fetch character fresh inside pcall, same as autofarm
+    local myPos       = nil
+    local closest     = nil
+    local closestDist = math.huge
+
+    pcall(function()
+        local char2 = player.Character
+        local hrp2  = char2 and char2:FindFirstChild("HumanoidRootPart")
+        if not hrp2 then return end
+        myPos = hrp2.Position
+    end)
+    if not myPos then return end
+
+    for _, model in ipairs(_dodgeFolder:GetChildren()) do
+        if not model:IsA("Model") then continue end
+        if playerNamesCache[model.Name] then continue end
+
+        local root = model:FindFirstChild("Hitbox") or model:FindFirstChild("HumanoidRootPart")
+        if not root then continue end
+
+        -- Guard: root.Position can be nil if the part is destroyed mid-frame
+        local rootPos = root.Position
+        if not rootPos then continue end
+
+        local dx3 = myPos.X - rootPos.X
+        local dy3 = myPos.Y - rootPos.Y
+        local dz3 = myPos.Z - rootPos.Z
+        local d   = math.sqrt(dx3*dx3 + dy3*dy3 + dz3*dz3)
+
+        local radius = cfg.radius or 15
+        if d < radius and d < closestDist then
+            closestDist = d
+            closest     = rootPos
+        end
+    end
+
+    if not closest then return end
+
+    -- Direction directly away from the closest bot on XZ plane
+    local dx  = myPos.X - closest.X
+    local dz  = myPos.Z - closest.Z
+    local len = math.sqrt(dx*dx + dz*dz)
+    if len < 0.01 then dx = 1; dz = 0
+    else dx = dx/len; dz = dz/len end
+
+    local newPos = Vector3.new(
+        myPos.X + dx * cfg.dodgeDist,
+        myPos.Y,
+        myPos.Z + dz * cfg.dodgeDist
+    )
+
+    pcall(function()
+        local char2 = player.Character
+        local hrp2  = char2 and char2:FindFirstChild("HumanoidRootPart")
+        if hrp2 then
+            hrp2.Position = newPos
+            hrp2.Velocity = Vector3.new(0, 0, 0)
+        end
+    end)
+
+    _botDodgeLastTrig = now
+end
+-- ─────────────────────────────────────────────────────────────
+_rebuildPlayerCache()
+spawn(function()
+    while true do
+        task.wait(5)
+        _rebuildPlayerCache()
+    end
+end)
 
 -- Cache workspace path
 local playersFolder = nil
@@ -2094,7 +2765,7 @@ local function RebuildChildrenCache()
 end
 
 
--- We track last-written values per drawing and skip writes if unchanged.
+-- track last-written values per drawing and skip writes if unchanged.
 -- For vectors/sizes we store X and Y separately to avoid Vector2 allocation on compare.
 
 local function SetVisible(obj, v)
@@ -2146,12 +2817,13 @@ local function UpdateNextbotESP()
     for k in pairs(_seen) do _seen[k] = nil end
 
     for _, model in ipairs(cachedChildren) do
-        if playerNamesCache[model.Name] then continue end
         if not model:IsA("Model") then continue end
 
-        -- Only nextbots have a Hitbox part — filters out tools, player
-        -- characters, and any other stray Models in the players folder
-        local root = model:FindFirstChild("Hitbox")
+        -- Skip real players — cache is refreshed every 5s
+        if playerNamesCache[model.Name] then continue end
+
+        -- Some nextbots use a Hitbox part, others (e.g. Kitten-type) use HumanoidRootPart
+        local root = model:FindFirstChild("Hitbox") or model:FindFirstChild("HumanoidRootPart")
         if not root then continue end
 
         _seen[model] = true
@@ -2309,16 +2981,24 @@ UILib:CenterMenu()
 local utilTab     = UILib:Tab("Utils")
 local utilSection = utilTab:Section("Bhop")
 
-local bhopToggle = utilSection:Toggle("Bhop", false, function(v) CONFIG.bhop.enabled = v end)
-bhopToggle:AddKeybind(nil, "Hold", true, function(key, mode)
-    CONFIG.bhop.key = (key and key ~= "") and key or nil
+local _bhopKeyName = (CONFIG.keybinds.bhopKey ~= "none") and CONFIG.keybinds.bhopKey or nil
+local _bhopKeyMode = CONFIG.keybinds.bhopMode
+local _bhopToggled = false
+local _bhopWasHeld = false
+local bhopToggle = utilSection:Toggle("Bhop", CONFIG.bhop.enabled, function(v) CONFIG.bhop.enabled = v end)
+bhopToggle:AddKeybind((CONFIG.keybinds.bhopKey ~= "none") and CONFIG.keybinds.bhopKey or nil, CONFIG.keybinds.bhopMode, true, function(key, mode)
+    _bhopKeyName = key and UILib:_KeyIDToName(key) or nil
+    _bhopKeyMode = mode or "Hold"
+    CONFIG.keybinds.bhopKey  = _bhopKeyName or "none"
+    CONFIG.keybinds.bhopMode = _bhopKeyMode
+    _bhopToggled = false
 end)
 
-utilSection:Toggle("Auto Strafe", false, function(v) CONFIG.bhop.autoStrafe = v end)
-utilSection:Slider("Strafe Sensitivity", 2,  1,  1,  20,  "px",  function(v) CONFIG.bhop.strafeSens  = v end)
-utilSection:Slider("Velocity Threshold",  1,  1,  1,  10,  " s/u", function(v) CONFIG.bhop.velThreshold = v end)
-utilSection:Slider("Jump Hold Duration",  10, 1,  1,  50,  "ms",  function(v) CONFIG.bhop.jumpDelay   = v / 1000 end)
-utilSection:Slider("Tick Rate",           10, 1,  1,  50,  "ms",  function(v) CONFIG.bhop.tickRate    = v / 1000 end)
+utilSection:Toggle("Auto Strafe", CONFIG.bhop.autoStrafe, function(v) CONFIG.bhop.autoStrafe = v end)
+utilSection:Slider("Strafe Sensitivity", CONFIG.bhop.strafeSens,  1,  1,  20,  "px",  function(v) CONFIG.bhop.strafeSens  = v end)
+utilSection:Slider("Velocity Threshold",  CONFIG.bhop.velThreshold,  1,  1,  10,  " s/u", function(v) CONFIG.bhop.velThreshold = v end)
+utilSection:Slider("Jump Hold Duration",  math.floor(CONFIG.bhop.jumpDelay*1000), 1,  1,  50,  "ms",  function(v) CONFIG.bhop.jumpDelay   = v / 1000 end)
+utilSection:Slider("Tick Rate",           math.floor(CONFIG.bhop.tickRate*1000), 1,  1,  50,  "ms",  function(v) CONFIG.bhop.tickRate    = v / 1000 end)
 
 -- TAB: ESP
 local espTab    = UILib:Tab("ESP")
@@ -2326,17 +3006,17 @@ local espMain   = espTab:Section("NextBot ESP")
 local espStyle  = espTab:Section("Style")
 local espColors = espTab:Section("Colors")
 
-espMain:Toggle("NextBot ESP",    false, function(v) CONFIG.nextbotEsp.enabled  = v; if not v then HideAllESP() end end)
-espMain:Toggle("Show Box",       true,  function(v) CONFIG.nextbotEsp.showBox  = v end)
-espMain:Toggle("Show Name",      true,  function(v) CONFIG.nextbotEsp.showName = v end)
-espMain:Toggle("Show Distance",  true,  function(v) CONFIG.nextbotEsp.showDist = v end)
-espMain:Toggle("Show Traceline", false, function(v) CONFIG.nextbotEsp.showLine = v end)
-espMain:Toggle("Fill Box",       false, function(v) CONFIG.nextbotEsp.fillBox  = v end)
+espMain:Toggle("NextBot ESP",    CONFIG.nextbotEsp.enabled, function(v) CONFIG.nextbotEsp.enabled  = v; if not v then HideAllESP() end end)
+espMain:Toggle("Show Box",       CONFIG.nextbotEsp.showBox,  function(v) CONFIG.nextbotEsp.showBox  = v end)
+espMain:Toggle("Show Name",      CONFIG.nextbotEsp.showName,  function(v) CONFIG.nextbotEsp.showName = v end)
+espMain:Toggle("Show Distance",  CONFIG.nextbotEsp.showDist,  function(v) CONFIG.nextbotEsp.showDist = v end)
+espMain:Toggle("Show Traceline", CONFIG.nextbotEsp.showLine, function(v) CONFIG.nextbotEsp.showLine = v end)
+espMain:Toggle("Fill Box",       CONFIG.nextbotEsp.fillBox, function(v) CONFIG.nextbotEsp.fillBox  = v end)
 
-espStyle:Slider("Fill Opacity", 15,  1,  1,    90,   "%",     function(v) CONFIG.nextbotEsp.fillOpacity = v / 100 end)
-espStyle:Slider("Box Thickness", 1,  1,  1,    5,    "px",   function(v) CONFIG.nextbotEsp.thickness   = v end)
-espStyle:Slider("Max Distance",  500, 50, 50, 2000,  " studs", function(v) CONFIG.nextbotEsp.maxDist     = v end)
-espStyle:Slider("Min Box Size",  20,  5,  5,  100,   "px",   function(v) CONFIG.nextbotEsp.minBoxSize  = v end)
+espStyle:Slider("Fill Opacity", math.floor(CONFIG.nextbotEsp.fillOpacity*100),  1,  1,    90,   "%",     function(v) CONFIG.nextbotEsp.fillOpacity = v / 100 end)
+espStyle:Slider("Box Thickness", CONFIG.nextbotEsp.thickness,  1,  1,    5,    "px",   function(v) CONFIG.nextbotEsp.thickness   = v end)
+espStyle:Slider("Max Distance",  CONFIG.nextbotEsp.maxDist, 50, 50, 2000,  " studs", function(v) CONFIG.nextbotEsp.maxDist     = v end)
+espStyle:Slider("Min Box Size",  CONFIG.nextbotEsp.minBoxSize,  5,  5,  100,   "px",   function(v) CONFIG.nextbotEsp.minBoxSize  = v end)
 
 local colorPresets = {"Red", "Orange", "Yellow", "Green", "Cyan", "Blue", "Purple", "White", "Pink"}
 local colorValues  = {
@@ -2351,36 +3031,47 @@ local colorValues  = {
     Pink   = Color3.fromRGB(255, 100, 180),
 }
 
-espColors:Dropdown("Box Color",       {"Red"},    colorPresets, false, function(v)
+espColors:Dropdown("Box Color",       {CONFIG.ui.boxColor},    colorPresets, false, function(v)
+    CONFIG.ui.boxColor = v[1]
     CONFIG.nextbotEsp.boxColor = colorValues[v[1]]
     for _, e in pairs(nextbotDrawings) do e.box.Color = colorValues[v[1]]; e.fill.Color = colorValues[v[1]]; e.line.Color = colorValues[v[1]] end
 end)
-espColors:Dropdown("Name Color",      {"White"},  colorPresets, false, function(v)
+espColors:Dropdown("Name Color",      {CONFIG.ui.nameColor},  colorPresets, false, function(v)
+    CONFIG.ui.nameColor = v[1]
     CONFIG.nextbotEsp.nameColor = colorValues[v[1]]
     for _, e in pairs(nextbotDrawings) do e.label.Color = colorValues[v[1]] end
 end)
-espColors:Dropdown("Distance Color",  {"Yellow"}, colorPresets, false, function(v)
+espColors:Dropdown("Distance Color",  {CONFIG.ui.distColor}, colorPresets, false, function(v)
+    CONFIG.ui.distColor = v[1]
     CONFIG.nextbotEsp.distColor = colorValues[v[1]]
     for _, e in pairs(nextbotDrawings) do e.dist.Color = colorValues[v[1]] end
 end)
-espColors:Dropdown("Traceline Color", {"Red"},    colorPresets, false, function(v)
+espColors:Dropdown("Traceline Color", {CONFIG.ui.lineColor},    colorPresets, false, function(v)
+    CONFIG.ui.lineColor = v[1]
     CONFIG.nextbotEsp.lineColor = colorValues[v[1]]
     for _, e in pairs(nextbotDrawings) do e.line.Color = colorValues[v[1]] end
 end)
 
 -- TAB: Funnies
-local funniesTab  = UILib:Tab("Funnies")
-local coneSection = funniesTab:Section("Cone Hat")
-local coneStyle   = funniesTab:Section("Cone Style")
+local funniesTab    = UILib:Tab("Funnies")
+local coneSection   = funniesTab:Section("Cone Hat")
+local coneStyle     = funniesTab:Section("Cone Style")
+local velSection    = funniesTab:Section("Velocity Indicator")
+local chSection     = funniesTab:Section("Crosshair")
+local chStyle       = funniesTab:Section("Crosshair Style")
+local dodgeSection  = funniesTab:Section("Bot Dodge")
+local dodgeSettings = funniesTab:Section("Bot Dodge Settings")
+local miscSection   = funniesTab:Section("Misc")
+local miscSettings  = funniesTab:Section("Misc Settings")
 
-coneSection:Toggle("Cone Hat", false, function(v) CONFIG.coneHat.enabled = v end)
+coneSection:Toggle("Cone Hat", CONFIG.coneHat.enabled, function(v) CONFIG.coneHat.enabled = v end)
 
-coneStyle:Slider("FPS",      60, 5,  10, 120, " fps", function(v) CONFIG.coneHat.fps      = v end)
-coneStyle:Slider("Segments", 24, 2,  6,  48,  "",     function(v) CONFIG.coneHat.segments  = v end)
-coneStyle:Slider("Radius",   18, 1,  5,  50,  "",     function(v) CONFIG.coneHat.radius    = v / 10 end)
-coneStyle:Slider("Height",   13, 1,  5,  50,  "",     function(v) CONFIG.coneHat.height    = v / 10 end)
-coneStyle:Slider("Y Offset",  6, 1,  0,  30,  "",     function(v) CONFIG.coneHat.yOffset   = v / 10 end)
-coneStyle:Slider("Z Index",   5, 1,  1,  10,  "",     function(v) CONFIG.coneHat.zindex    = v end)
+coneStyle:Slider("FPS",      CONFIG.coneHat.fps, 5,  10, 120, " fps", function(v) CONFIG.coneHat.fps      = v end)
+coneStyle:Slider("Segments", CONFIG.coneHat.segments, 2,  6,  48,  "",     function(v) CONFIG.coneHat.segments  = v end)
+coneStyle:Slider("Radius",   math.floor(CONFIG.coneHat.radius*10), 1,  5,  50,  "",     function(v) CONFIG.coneHat.radius    = v / 10 end)
+coneStyle:Slider("Height",   math.floor(CONFIG.coneHat.height*10), 1,  5,  50,  "",     function(v) CONFIG.coneHat.height    = v / 10 end)
+coneStyle:Slider("Y Offset",  math.floor(CONFIG.coneHat.yOffset*10), 1,  0,  30,  "",     function(v) CONFIG.coneHat.yOffset   = v / 10 end)
+coneStyle:Slider("Z Index",   CONFIG.coneHat.zindex, 1,  1,  10,  "",     function(v) CONFIG.coneHat.zindex    = v end)
 
 local coneColorPresets = {"Black", "Red", "Orange", "Yellow", "Green", "Cyan", "Blue", "Purple", "White", "Pink"}
 local coneColorValues  = {
@@ -2395,40 +3086,130 @@ local coneColorValues  = {
     White  = Color3.fromRGB(255, 255, 255),
     Pink   = Color3.fromRGB(255, 100, 180),
 }
-coneStyle:Dropdown("Hat Color", {"Black"}, coneColorPresets, false, function(v)
+coneStyle:Dropdown("Hat Color", {CONFIG.ui.hatColor}, coneColorPresets, false, function(v)
+    CONFIG.ui.hatColor = v[1]
     CONFIG.coneHat.color = coneColorValues[v[1]]
     for _, tri in ipairs(coneTriangles) do tri.Color = coneColorValues[v[1]] end
 end)
+
+dodgeSection:Toggle("Bot Dodge", CONFIG.botDodge.enabled, function(v)
+    CONFIG.botDodge.enabled = v
+end)
+dodgeSettings:Slider("Trigger Radius", CONFIG.botDodge.radius,    1,  5, 100, " studs", function(v) CONFIG.botDodge.radius    = v end)
+dodgeSettings:Slider("Dodge Distance", CONFIG.botDodge.dodgeDist, 1,  1,  50, " studs", function(v) CONFIG.botDodge.dodgeDist = v end)
+dodgeSettings:Slider("Cooldown",       math.floor(CONFIG.botDodge.cooldown * 10), 1, 1, 50, "00ms", function(v) CONFIG.botDodge.cooldown = v / 10 end)
+
+velSection:Toggle("Vel. Indicator", CONFIG.velIndicator.enabled, function(v)
+    CONFIG.velIndicator.enabled = v
+    if not v then
+        for _, ln in pairs(_velDrawings) do ln.Visible = false end
+    end
+end)
+
+-- Crosshair
+chSection:Toggle("Crosshair", CONFIG.crosshair.enabled, function(v)
+    CONFIG.crosshair.enabled = v
+    if not v then _crosshairClear() end
+end)
+chSection:Dropdown("Style", {CONFIG.ui.crosshairStyle}, {"Dot", "Cross", "Circle"}, false, function(v)
+    CONFIG.ui.crosshairStyle = v[1]
+    CONFIG.crosshair.style = v[1]
+end)
+
+local chColorPresets = {"White", "Red", "Orange", "Yellow", "Green", "Cyan", "Blue", "Purple", "Pink", "Black"}
+local chColorValues  = {
+    White  = Color3.fromRGB(255, 255, 255),
+    Red    = Color3.fromRGB(255,  60,  60),
+    Orange = Color3.fromRGB(255, 140,   0),
+    Yellow = Color3.fromRGB(255, 220,   0),
+    Green  = Color3.fromRGB( 60, 255,  60),
+    Cyan   = Color3.fromRGB(  0, 220, 255),
+    Blue   = Color3.fromRGB( 60, 100, 255),
+    Purple = Color3.fromRGB(180,  60, 255),
+    Pink   = Color3.fromRGB(255, 100, 180),
+    Black  = Color3.fromRGB(  0,   0,   0),
+}
+chSection:Dropdown("Color", {CONFIG.ui.crosshairColor}, chColorPresets, false, function(v)
+    CONFIG.ui.crosshairColor = v[1]
+    CONFIG.crosshair.color = chColorValues[v[1]]
+end)
+
+chStyle:Slider("Size",      CONFIG.crosshair.size, 1,  1, 40, "px", function(v) CONFIG.crosshair.size      = v end)
+chStyle:Slider("Gap",       CONFIG.crosshair.gap, 1,  0, 20, "px", function(v) CONFIG.crosshair.gap       = v end)
+chStyle:Slider("Thickness", CONFIG.crosshair.thickness, 1,  1, 5,  "px", function(v) CONFIG.crosshair.thickness = v end)
+
+-- Misc toggles
+local noclipToggle = miscSection:Toggle("Noclip",     CONFIG.noclip.enabled, function(v) CONFIG.noclip.enabled    = v end)
+noclipToggle:AddKeybind((CONFIG.keybinds.noclipKey ~= "none") and CONFIG.keybinds.noclipKey or nil, CONFIG.keybinds.noclipMode, true, function(key, mode)
+    _noclipKeyName = key and UILib:_KeyIDToName(key) or nil
+    _noclipKeyMode = mode or "Hold"
+    CONFIG.keybinds.noclipKey  = _noclipKeyName or "none"
+    CONFIG.keybinds.noclipMode = _noclipKeyMode
+    _noclipToggled = false
+end)
+local flyToggle  = miscSection:Toggle("Fly",       CONFIG.fly.enabled, function(v) CONFIG.fly.enabled      = v end)
+flyToggle:AddKeybind((CONFIG.keybinds.flyKey ~= "none") and CONFIG.keybinds.flyKey or nil, CONFIG.keybinds.flyMode, true, function(key, mode)
+    _flyKeyName = key and UILib:_KeyIDToName(key) or nil
+    _flyKeyMode = mode or "Hold"
+    CONFIG.keybinds.flyKey  = _flyKeyName or "none"
+    CONFIG.keybinds.flyMode = _flyKeyMode
+    _flyToggled = false
+end)
+local hjToggle   = miscSection:Toggle("High Jump", CONFIG.highJump.enabled, function(v) CONFIG.highJump.enabled  = v end)
+hjToggle:AddKeybind((CONFIG.keybinds.highJumpKey ~= "none") and CONFIG.keybinds.highJumpKey or nil, CONFIG.keybinds.highJumpMode, true, function(key, mode)
+    _hjKeyName = key and UILib:_KeyIDToName(key) or nil
+    _hjKeyMode = mode or "Hold"
+    CONFIG.keybinds.highJumpKey  = _hjKeyName or "none"
+    CONFIG.keybinds.highJumpMode = _hjKeyMode
+    _hjToggled = false
+end)
+miscSection:Toggle("Anti-Void", CONFIG.antiVoid.enabled, function(v) CONFIG.antiVoid.enabled   = v end)
+
+miscSettings:Slider("Fly Speed",      CONFIG.fly.speed, 5,   5,  200, " s/u", function(v) CONFIG.fly.speed          = v end)
+miscSettings:Slider("Jump Force",     CONFIG.highJump.force, 5,  20,  300, "",     function(v) CONFIG.highJump.force      = v end)
+miscSettings:Slider("Void Threshold", CONFIG.antiVoid.threshold, 10, -500, -10, "", function(v) CONFIG.antiVoid.threshold  = v end)
+miscSettings:Slider("Safe Y",         CONFIG.antiVoid.safeY, 1,   1,  500, "",     function(v) CONFIG.antiVoid.safeY      = v end)
 
 -- TAB: Autofarm
 local farmTab  = UILib:Tab("Autofarm")
 local farmMain = farmTab:Section("Farm Settings")
 local farmPos  = farmTab:Section("Sky Position")
 
-farmMain:Toggle("Auto Farm",       false, function(v) CONFIG.autofarm.enabled       = v end)
-farmMain:Slider("Collect Time",      3, 1,   1,  30, "00ms",  function(v) CONFIG.autofarm.collectionTime = v / 10 end)
-farmMain:Slider("Scan Cooldown",     5, 1,   1,  20, "00ms",  function(v) CONFIG.autofarm.safetyInterval = v / 10 end)
-farmMain:Toggle("Bot Safety Check", true,  function(v) CONFIG.autofarm.safetyEnabled  = v end)
-farmMain:Slider("Safe Radius",      40, 5,  10, 150, " studs", function(v) CONFIG.autofarm.safeRadius     = v end)
-farmMain:Slider("Bot Retry Delay",   2, 1,   1,  10, "s",     function(v) CONFIG.autofarm.botRetryDelay  = v end)
+farmMain:Toggle("Auto Farm",       CONFIG.autofarm.enabled, function(v) CONFIG.autofarm.enabled       = v end)
+farmMain:Slider("Collect Time",      math.floor(CONFIG.autofarm.collectionTime*10), 1,   1,  30, "00ms",  function(v) CONFIG.autofarm.collectionTime = v / 10 end)
+farmMain:Slider("Scan Cooldown",     math.floor(CONFIG.autofarm.safetyInterval*10), 1,   1,  20, "00ms",  function(v) CONFIG.autofarm.safetyInterval = v / 10 end)
+farmMain:Toggle("Bot Safety Check", CONFIG.autofarm.safetyEnabled,  function(v) CONFIG.autofarm.safetyEnabled  = v end)
+farmMain:Slider("Safe Radius",      CONFIG.autofarm.safeRadius, 5,  10, 150, " studs", function(v) CONFIG.autofarm.safeRadius     = v end)
+farmMain:Slider("Bot Retry Delay",   CONFIG.autofarm.botRetryDelay, 1,   1,  10, "s",     function(v) CONFIG.autofarm.botRetryDelay  = v end)
 
-farmPos:Slider("Sky X",  -8, 1, -2000, 2000, "", function(v) CONFIG.autofarm.skyX = v end)
-farmPos:Slider("Sky Y",  380, 5,  100, 2000, "", function(v) CONFIG.autofarm.skyY = v end)
-farmPos:Slider("Sky Z",   87, 1, -2000, 2000, "", function(v) CONFIG.autofarm.skyZ = v end)
+farmPos:Slider("Sky X",  math.floor(CONFIG.autofarm.skyX), 1, -2000, 2000, "", function(v) CONFIG.autofarm.skyX = v end)
+farmPos:Slider("Sky Y",  math.floor(CONFIG.autofarm.skyY), 5,  100, 2000, "", function(v) CONFIG.autofarm.skyY = v end)
+farmPos:Slider("Sky Z",  math.floor(CONFIG.autofarm.skyZ), 1, -2000, 2000, "", function(v) CONFIG.autofarm.skyZ = v end)
 
--- TAB: Settings (built-in theming, watermark, menu key rebind)
+-- TAB: Settings — created before Credits so Credits appears last
 local shouldDie = false
 local _, menuSection = UILib:CreateSettingsTab("Settings")
 
-local creditsSection = menuSection  -- reuse the menu section for credits/unload
+-- Default theme: Neverlose
+UILib._theming.accent   = Color3.fromRGB(77,  166, 255)
+UILib._theming.body     = Color3.fromRGB(10,  13,  20)
+UILib._theming.text     = Color3.fromRGB(220, 228, 240)
+UILib._theming.subtext  = Color3.fromRGB(90,  105, 130)
+UILib._theming.border1  = Color3.fromRGB(35,  45,  65)
+UILib._theming.border0  = Color3.fromRGB(25,  32,  50)
+UILib._theming.surface1 = Color3.fromRGB(22,  28,  42)
+UILib._theming.surface0 = Color3.fromRGB(15,  19,  30)
+UILib._theming.crust    = Color3.fromRGB(5,   7,   12)
+
 menuSection:Button("Unload", function() shouldDie = true end)
 
--- Credits (displayed as disabled buttons)
+-- TAB: Credits — created last so it appears after Settings in the sidebar
 local credTab = UILib:Tab("Credits")
 local credSec = credTab:Section("About")
 credSec:Button("UI - UILib",               function() end)
 credSec:Button("Dev - Jay",                function() end)
 credSec:Button("Cone Hat - crayonskidder", function() end)
+credSec:Button("Vel. Indicator - starryskidder", function() end)
 
 UILib:Notification("Loaded! Press F1 to toggle.", 5)
 
@@ -2596,7 +3377,20 @@ end
 spawn(function()
     while not shouldDie do
         local cfg = CONFIG.bhop
-        if cfg.enabled then
+        local active = false
+        if _bhopKeyMode == "Always" then
+            active = true
+        elseif _bhopKeyName then
+            local held = UILib._inputs[_bhopKeyName] and UILib._inputs[_bhopKeyName].held
+            if _bhopKeyMode == "Toggle" then
+                if held and not _bhopWasHeld then _bhopToggled = not _bhopToggled end
+                _bhopWasHeld = held
+                active = _bhopToggled
+            else
+                active = held
+            end
+        end
+        if cfg.enabled and active then
             local character = player.Character
             if character then
                 local rootPart = character:FindFirstChild("HumanoidRootPart")
@@ -2715,8 +3509,8 @@ spawn(function()
                                 local tp = mover.Position
                                 for _, botModel in pairs(pf:GetChildren()) do
                                     if botModel:IsA("Model") then
-                                        -- Nextbots have a Hitbox part
-                                        local hitbox = botModel:FindFirstChild("Hitbox")
+                                        -- Nextbots use Hitbox or HumanoidRootPart
+                                        local hitbox = botModel:FindFirstChild("Hitbox") or botModel:FindFirstChild("HumanoidRootPart")
                                         if hitbox then
                                             local bp = botModel:FindFirstChild("HumanoidRootPart")
                                             if bp then
@@ -2787,11 +3581,19 @@ while not shouldDie do
     if CONFIG.nextbotEsp.enabled and not UILib._menu_open then
         UpdateNextbotESP()
     end
+    _velUpdate()
+    _crosshairUpdate()
+    _flyUpdate()
+    _highJumpUpdate()
+    _antiVoidUpdate()
+    _botDodgeUpdate()
     UILib:Step()
     task.wait()
 end
 
 ClearAllNextbotESP()
+_velClearAll()
+_crosshairClear()
 ESP.destroyAll()
 UILib:Unload()
 setrobloxinput(true)
